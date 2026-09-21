@@ -861,6 +861,7 @@ class DockHarness:
         interaction.is_pointer_inside_dock.return_value = True
         self._left_edge_window = SimpleNamespace(
             _cache=dock_window_mod._DockWindowCache.create(),
+            get_display=lambda: SimpleNamespace(get_xdisplay=lambda: None),
             interaction=interaction,
             dock_hovered=True,
         )
