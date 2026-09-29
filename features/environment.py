@@ -21,6 +21,11 @@ def before_scenario(context, scenario) -> None:
 
         context.preview = PreviewHarness()
         return
+    if "gtk_stack" in scenario.effective_tags:
+        from tests.ui.stack_support import StackHarness
+
+        context.stack = StackHarness()
+        return
     context.harness = DockHarness()
     context.harness.start()
 
@@ -33,3 +38,5 @@ def after_scenario(context, _scenario) -> None:
         context.preview.close()
     if hasattr(context, "harness"):
         context.harness.stop()
+    if hasattr(context, "stack"):
+        context.stack.close()
