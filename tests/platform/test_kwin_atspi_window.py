@@ -286,9 +286,8 @@ def inline_worker(monkeypatch):
     monkeypatch.setattr(atspi_window.GLib, "idle_add", MagicMock(return_value=1))
 
 
-def test_connection_authenticates_as_bus_and_does_not_send_second_hello(
-    monkeypatch, inline_worker
-):
+@pytest.mark.usefixtures("inline_worker")
+def test_connection_authenticates_as_bus_and_does_not_send_second_hello(monkeypatch):
     service, _ = _service()
     connection = _connection()
     discover = MagicMock(return_value="unix:path=/tmp/current-atspi")
@@ -315,7 +314,8 @@ def test_connection_authenticates_as_bus_and_does_not_send_second_hello(
         service.stop()
 
 
-def test_missing_bus_retries_without_another_start(monkeypatch, inline_worker):
+@pytest.mark.usefixtures("inline_worker")
+def test_missing_bus_retries_without_another_start(monkeypatch):
     service, _ = _service()
     connection = _connection()
     discover = MagicMock(side_effect=[RuntimeError("missing"), "unix:path=/tmp/late"])
@@ -335,7 +335,8 @@ def test_missing_bus_retries_without_another_start(monkeypatch, inline_worker):
         service.stop()
 
 
-def test_closed_bus_clears_windows_and_rediscovers_address(monkeypatch, inline_worker):
+@pytest.mark.usefixtures("inline_worker")
+def test_closed_bus_clears_windows_and_rediscovers_address(monkeypatch):
     service, model = _service()
     old, new = _connection(), _connection()
     discover = MagicMock(side_effect=["unix:path=/tmp/old", "unix:path=/tmp/new"])
@@ -360,7 +361,8 @@ def test_closed_bus_clears_windows_and_rediscovers_address(monkeypatch, inline_w
         service.stop()
 
 
-def test_old_connection_cannot_replace_restarted_service(monkeypatch, inline_worker):
+@pytest.mark.usefixtures("inline_worker")
+def test_old_connection_cannot_replace_restarted_service(monkeypatch):
     service, _ = _service()
     old, new = _connection(), _connection()
     first = True
@@ -395,8 +397,9 @@ def test_old_connection_cannot_replace_restarted_service(monkeypatch, inline_wor
         service.stop()
 
 
+@pytest.mark.usefixtures("inline_worker")
 def test_first_unique_name_is_not_assumed_to_be_a_system_service(
-    monkeypatch, inline_worker
+    monkeypatch,
 ):
     service, _ = _service()
     connection = _connection()
