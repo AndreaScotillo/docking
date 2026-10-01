@@ -81,6 +81,16 @@ docking
 - **Compression**: binary `.deb` artifacts are built with `xz` compression for
   compatibility with older `dpkg` versions that cannot unpack `control.tar.zst`.
 
+## APT repository (Cloudsmith)
+
+Stable releases can be published to Cloudsmith after the `.deb` installation
+matrix passes. Publication uses OIDC, validates both architectures, and supports
+checksum-safe retries of a specific release tag. It remains disabled until the
+Cloudsmith workspace and GitHub variables are configured.
+
+See [Cloudsmith setup and installation](cloudsmith/README.md) for account setup,
+GitHub configuration, activation, user keyrings, and upgrade verification.
+
 ## PPA (Launchpad)
 
 ```bash
