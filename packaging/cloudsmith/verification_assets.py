@@ -62,6 +62,10 @@ def main() -> None:
         if any(item["name"] == asset for item in metadata["assets"]):
             download(tag, asset, args.directory / "previous")
             return
+        if not (args.arch == "arm64" and current == (2, 13, 8)):
+            raise SystemExit(
+                f"Missing preceding stable asset {asset}; cannot verify upgrade"
+            )
     # ARM64 was introduced in 2.13.8; its first publication has no predecessor.
     print(f"::notice::No preceding stable {args.arch} package; fresh install only")
 

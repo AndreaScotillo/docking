@@ -91,3 +91,30 @@ def test_first_arm64_release_reports_missing_predecessor(monkeypatch, tmp_path, 
     assets.main()
     assert len(calls) == 1
     assert "fresh install only" in capsys.readouterr().out
+
+
+def test_missing_predecessor_asset_fails_after_initial_release(monkeypatch, tmp_path):
+    def gh_json(*args):
+        if args[1] == "list":
+            return [{"tagName": "v2.13.8", "isDraft": False, "isPrerelease": False}]
+        if args[-1] == "assets":
+            return {"assets": []}
+        return {"isDraft": False, "isPrerelease": False}
+
+    monkeypatch.setattr(assets, "gh_json", gh_json)
+    monkeypatch.setattr(assets, "download", lambda *args: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "verify",
+            "--release-tag",
+            "v2.13.9",
+            "--arch",
+            "arm64",
+            "--directory",
+            str(tmp_path),
+        ],
+    )
+    with pytest.raises(SystemExit, match="cannot verify upgrade"):
+        assets.main()

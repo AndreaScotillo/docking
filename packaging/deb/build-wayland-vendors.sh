@@ -13,7 +13,7 @@ for entry in 'ubuntu:22.04 3.10' 'debian:12 3.11' 'ubuntu:24.04 3.12' 'debian:13
             apt-get install -y --no-install-recommends \
                 build-essential python3-dev python3-pip libffi-dev libwayland-dev wayland-protocols pkg-config
             python3 -m pip install --upgrade --ignore-installed pip
-            python3 -m pip install --no-compile --no-binary=pywayland \
+            python3 -m pip install --upgrade --no-compile --no-binary=pywayland \
                 --target="/vendors/vendor-python${PYTHON_MINOR}" "pywayland>=0.4.18,<0.5"
             rm -rf /vendors/vendor-python${PYTHON_MINOR}/bin
             PYTHONPATH="/vendors/vendor-python${PYTHON_MINOR}" python3 -c \
