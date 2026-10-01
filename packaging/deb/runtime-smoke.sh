@@ -77,10 +77,25 @@ EOF
     else
         grep -F 'Selected session backend: x11' "$HOME/docking-$backend.log"
     fi
-    if grep -E 'Traceback|Failed to start runtime stage' "$HOME/docking-$backend.log"; then exit 1; fi
+    echo "Checking D-Bus responsiveness before shutdown"
+    gdbus call --session --timeout 3 --dest org.docking.Docking --object-path /org/docking/Docking \
+        --method org.docking.Docking.Items1.GetCount
+    echo "Sending SIGTERM to $app_pid"
     kill -TERM "$app_pid"
+    for attempt in {1..40}; do
+        kill -0 "$app_pid" 2>/dev/null || break
+        sleep 0.25
+    done
+    if kill -0 "$app_pid" 2>/dev/null; then
+        kill -USR1 "$app_pid"
+        sleep 1
+        echo "Docking did not shut down within 10 seconds" >&2
+        kill -KILL "$app_pid"
+        exit 1
+    fi
     wait "$app_pid"
     app_pid=""
+    if grep -E 'Traceback|Failed to start runtime stage|Forcing shutdown after the cleanup timeout' "$HOME/docking-$backend.log"; then exit 1; fi
     echo "Installed Docking passed $backend startup, D-Bus request, and graceful shutdown"
 else
     # Sway refuses to run with root privileges. Use an isolated unprivileged user.
