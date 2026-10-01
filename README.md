@@ -99,15 +99,50 @@ pip install -e ".[wayland]"
 
 ## Installation
 
-The [Cloudsmith APT repository](packaging/cloudsmith/README.md) is configured and
-awaiting its first package publication. Use the release downloads below until
-APT installation has been verified.
+### Debian and Ubuntu (APT)
+
+On Ubuntu 22.04/24.04 and Debian 12/13, add Docking's APT repository once to receive
+updates through your package manager. Both amd64 and arm64 are available.
+
+Download the public signing key and check its fingerprint before continuing:
+
+```bash
+sudo apt update
+sudo apt install curl ca-certificates gnupg
+curl -fsSL https://dl.cloudsmith.io/public/docking/docking-apt/gpg.key \
+  -o /tmp/docking-cloudsmith.asc
+gpg --show-keys --with-fingerprint /tmp/docking-cloudsmith.asc
+```
+
+The fingerprint must be `811B48CD4A69170DD98F4F49185CED80A7947754`.
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo install -m 0644 /tmp/docking-cloudsmith.asc /etc/apt/keyrings/docking-cloudsmith.asc
+. /etc/os-release
+sudo tee /etc/apt/sources.list.d/docking.sources > /dev/null <<EOF
+Types: deb
+URIs: https://dl.cloudsmith.io/public/docking/docking-apt/deb/${ID}
+Suites: ${VERSION_CODENAME}
+Components: main
+Architectures: amd64 arm64
+Signed-By: /etc/apt/keyrings/docking-cloudsmith.asc
+EOF
+sudo apt update
+sudo apt install docking
+```
+
+For subsequent updates, run `sudo apt update` and `sudo apt upgrade`. Existing
+`.deb` installations can upgrade directly through APT. Maintainers can find setup
+and publication details in the [Cloudsmith guide](packaging/cloudsmith/README.md).
+
+### Release downloads
 
 The latest prebuilt packages are available on
 [GitHub Releases](https://github.com/edumucelli/docking/releases) and linked
 directly below.
 - `AppImage`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.AppImage), [arm64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-aarch64.AppImage)
-- `Debian .deb`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.deb), [arm64 release assets](https://github.com/edumucelli/docking/releases)
+- `Debian .deb`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.deb), [arm64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-aarch64.deb)
 - `RPM`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.rpm), [arm64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-aarch64.rpm)
 - `Flatpak`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.flatpak), [arm64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-aarch64.flatpak)
 - `Snap`: [x64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-x86_64.snap), [arm64](https://github.com/edumucelli/docking/releases/latest/download/docking-latest-linux-aarch64.snap)
