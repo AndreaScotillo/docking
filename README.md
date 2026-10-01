@@ -99,6 +99,10 @@ pip install -e ".[wayland]"
 
 ## Installation
 
+The [Cloudsmith APT repository](packaging/cloudsmith/README.md) is configured and
+awaiting its first package publication. Use the release downloads below until
+APT installation has been verified.
+
 The latest prebuilt packages are available on
 [GitHub Releases](https://github.com/edumucelli/docking/releases) and linked
 directly below.
@@ -562,6 +566,7 @@ every package format live in the [packaging guide](packaging/README.md).
 - [D-Bus Remote Control](docs/DBUS.md)
 - [Icon Assets and Packaging](docs/ICONS.md)
 - [Packaging](packaging/README.md)
+- [Cloudsmith APT Repository Setup](packaging/cloudsmith/README.md)
 
 ## Contributing
 
@@ -575,3 +580,6 @@ every package format live in the [packaging guide](packaging/README.md).
 ## License
 
 GPL-3.0-or-later
+
+APT repository hosting is provided free for this open-source project by
+[Cloudsmith](https://cloudsmith.com).

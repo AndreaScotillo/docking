@@ -38,7 +38,9 @@ override_dh_auto_install:
 	# The docking entrypoint adds /usr/lib/docking/vendor to sys.path.
 	python3 -m pip install --no-compile \
 		--target=debian/docking/usr/lib/docking/vendor \
-		openmeteo-requests requests-cache retry-requests
+		openmeteo-requests requests-cache retry-requests exceptiongroup
+	# Newer builders omit cattrs' conditional exceptiongroup dependency, but
+	# the same package must also support hosts running Python 3.10.
 	# Remove .dist-info so dh_python3 won't auto-add vendored
 	# packages as system dependencies.
 	rm -rf debian/docking/usr/lib/docking/vendor/*.dist-info
