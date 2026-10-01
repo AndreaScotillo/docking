@@ -3,14 +3,16 @@
 Stable releases publish their original amd64 and arm64 `.deb` assets to the public
 [`docking/docking-apt`](https://cloudsmith.io/~docking/repos/docking-apt/setup/)
 repository. GitHub Actions authenticates as `github-docking` through OIDC; no API
-key is needed. Packages use `any-distro/any-version`, component `main`.
+key is needed. Uploads use `any-distro/any-version`, component `main`; Cloudsmith
+includes these packages in each distribution’s APT index.
 
 ## Cloudsmith setup
 
 - Keep the repository public, with **Broadcast** enabled. For free OSS hosting,
   retain the Cloudsmith attribution in the main README. Disable paid overage in
   workspace usage limits if required.
-- Give service `github-docking` read and upload access to `docking-apt`.
+- Under **Repository → Settings → Access control**, grant service
+  `github-docking` **Write** access to `docking-apt` (includes read/upload).
 - Add an OpenID provider with issuer `https://token.actions.githubusercontent.com`,
   allow that service, and require these claims:
 
@@ -72,18 +74,22 @@ before publishing installation instructions:
 
 | Setting | Value |
 | --- | --- |
-| APT URI | `https://dl.cloudsmith.io/public/docking/docking-apt/deb/any-distro` |
-| Suite / component | `any-version` / `main` |
+| APT URI | `https://dl.cloudsmith.io/public/docking/docking-apt/deb/<distro>` |
+| Suite / component | OS codename / `main` |
 | Public key | `https://dl.cloudsmith.io/public/docking/docking-apt/gpg.key` |
 | Signing fingerprint | `811B48CD4A69170DD98F4F49185CED80A7947754` |
+
+Clients select the distribution and codename from `/etc/os-release`, such as
+`ubuntu` / `jammy` or `debian` / `trixie`. See the
+[user installation instructions](../../README.md#debian-and-ubuntu-apt).
 
 1. Verify `apt update` accepts the signature and `apt-cache policy docking` shows
    Cloudsmith's expected version.
 2. Install in a clean supported system and smoke-test the application.
 3. Upgrade a previous `.deb` installation with
    `sudo apt install --only-upgrade docking`, and confirm its version changes.
-4. Add the verified installation commands to the main README and remove its
-   pending-publication notice. Keep direct release downloads available.
+4. Keep the main README and website installation commands current when changing
+   repository settings. Retain direct release downloads as a fallback.
 
 Retain previous packages for both architectures and monitor repository usage.
 Signing-key changes require updating client instructions; the workflow never
