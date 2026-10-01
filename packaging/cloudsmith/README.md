@@ -44,10 +44,14 @@ Keep the enable flag at repository scope: the calling job reads it before enteri
 the environment. These values and the signing fingerprint are public identifiers.
 
 Before enabling, require the binary installation checks to pass on Ubuntu
-22.04/24.04 and Debian 12/13 for both architectures. They verify runtime imports;
-check desktop startup and X11/Wayland behavior separately on intended systems.
+22.04/24.04/26.04 and Debian 12/13 for both architectures. They verify runtime imports, X11 startup, and native Wayland startup under
+headless Sway, including the live foreign-toplevel protocol. Full desktop
+behavior still needs testing on intended compositors.
 
-After activation, a successful CI release publishes automatically. The initial
+After activation, a successful CI release publishes automatically. Publication
+is followed by signed APT installation and upgrade checks on the same matrix,
+including release-asset checksum verification and runtime startup. The first
+release for an architecture has no predecessor and reports a fresh-install-only check. The initial
 release must include both versioned `.deb` assets; v2.13.7 has only amd64.
 
 ## Retry a publication
@@ -79,17 +83,17 @@ before publishing installation instructions:
 | Public key | `https://dl.cloudsmith.io/public/docking/docking-apt/gpg.key` |
 | Signing fingerprint | `811B48CD4A69170DD98F4F49185CED80A7947754` |
 
-Clients select the distribution and codename from `/etc/os-release`, such as
+Clients select the distribution and codename from `/etc/os-release`, using
+`UBUNTU_CODENAME` for Ubuntu derivatives, such as
 `ubuntu` / `jammy` or `debian` / `trixie`. See the
 [user installation instructions](../../README.md#debian-and-ubuntu-apt).
 
-1. Verify `apt update` accepts the signature and `apt-cache policy docking` shows
-   Cloudsmith's expected version.
-2. Install in a clean supported system and smoke-test the application.
-3. Upgrade a previous `.deb` installation with
-   `sudo apt install --only-upgrade docking`, and confirm its version changes.
-4. Keep the main README and website installation commands current when changing
-   repository settings. Retain direct release downloads as a fallback.
+Re-run **Actions → Verify published APT packages** on `master` with the latest
+stable tag to check the live repository without uploading packages.
+
+Keep the main README and website commands current when changing repository
+settings. Retain direct release downloads as a fallback, and announce only
+distribution/architecture combinations whose verification checks passed.
 
 Retain previous packages for both architectures and monitor repository usage.
 Signing-key changes require updating client instructions; the workflow never

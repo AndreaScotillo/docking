@@ -657,7 +657,8 @@
               <span>Debian &amp; Ubuntu: install with APT</span>
               <svg viewBox="0 0 24 24" class="h-5 w-5 shrink-0 text-slate-400 transition group-open:rotate-45" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
             </summary>
-            <p class="mt-4 text-sm leading-7 text-slate-300">Add the repository once and receive updates through your package manager. Supports Ubuntu 22.04/24.04 and Debian 12/13, on both x64 and arm64.</p>
+            <p class="mt-4 text-sm leading-7 text-slate-300">Add the repository once and receive updates through your package manager. Supports Ubuntu 22.04/24.04/26.04 and Debian 12/13, on both x64 and arm64.</p>
+            <p class="mt-2 text-sm leading-7 text-slate-300">Ubuntu derivatives, including Linux Mint 21.x/22.x, use their Ubuntu base through <code>UBUNTU_CODENAME</code>. Their desktops are not separately tested.</p>
             <h3 class="mt-5 text-base font-semibold text-white">1. Download and verify the signing key</h3>
             <div class="code-scroll mt-3 overflow-x-auto rounded-xl border border-white/10 bg-midnight/60 p-4">
               <pre class="text-sm leading-7 text-slate-200"><code>sudo apt update
@@ -672,10 +673,16 @@ gpg --show-keys --with-fingerprint /tmp/docking-cloudsmith.asc</code></pre>
               <pre class="text-sm leading-7 text-slate-200"><code>sudo install -d -m 0755 /etc/apt/keyrings
 sudo install -m 0644 /tmp/docking-cloudsmith.asc /etc/apt/keyrings/docking-cloudsmith.asc
 . /etc/os-release
+APT_DISTRO="$ID"
+APT_SUITE="${VERSION_CODENAME:-}"
+if [ -n "${UBUNTU_CODENAME:-}" ]; then
+    APT_DISTRO=ubuntu
+    APT_SUITE="$UBUNTU_CODENAME"
+fi
 sudo tee /etc/apt/sources.list.d/docking.sources &gt; /dev/null &lt;&lt;EOF
 Types: deb
-URIs: https://dl.cloudsmith.io/public/docking/docking-apt/deb/${ID}
-Suites: ${VERSION_CODENAME}
+URIs: https://dl.cloudsmith.io/public/docking/docking-apt/deb/${APT_DISTRO}
+Suites: ${APT_SUITE}
 Components: main
 Architectures: amd64 arm64
 Signed-By: /etc/apt/keyrings/docking-cloudsmith.asc

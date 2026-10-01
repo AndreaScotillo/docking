@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import importlib.util
 import sys
 from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--require-wayland", action="store_true")
+args = parser.parse_args()
 
 python_minor = f"{sys.version_info.major}.{sys.version_info.minor}"
 paths = [
@@ -22,6 +27,8 @@ for module in ("openmeteo_requests", "requests_cache", "retry_requests", "dockin
 if importlib.util.find_spec("pywayland") is not None:
     importlib.import_module("pywayland.client")
     print("Imported the PyWayland native client")
+elif args.require_wayland:
+    raise SystemExit("The native Wayland check requires an importable PyWayland client")
 else:
     print("PyWayland unavailable on this host; live protocol features require it")
 
