@@ -84,7 +84,8 @@ before publishing installation instructions:
 | Signing fingerprint | `811B48CD4A69170DD98F4F49185CED80A7947754` |
 
 Clients select the distribution and codename from `/etc/os-release`, using
-`UBUNTU_CODENAME` for Ubuntu derivatives, such as
+`UBUNTU_CODENAME` for Ubuntu derivatives and `/etc/debian_version` when Debian
+omits its codename. Setup validates the supported base before writing a source. Examples include
 `ubuntu` / `jammy` or `debian` / `trixie`. See the
 [user installation instructions](../../README.md#debian-and-ubuntu-apt).
 
