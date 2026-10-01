@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -161,7 +162,7 @@ class TestFetchToday:
         assert got.date == "2026-10-01"
         assert got.copyright == "Dario Giannobile"
         assert got.explanation == "A full moon rises."
-        assert "assets.science.nasa.gov" in got.image_url
+        assert urlparse(got.image_url).hostname == "assets.science.nasa.gov"
         assert "&amp;" not in got.image_url
         assert got.page_url.startswith("https://science.nasa.gov/image-article/apod-")
         assert Path(got.cached_path).read_bytes() == b"new image"
