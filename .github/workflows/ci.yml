@@ -547,7 +547,12 @@ jobs:
             libwayland-dev wayland-protocols \
             pybuild-plugin-pyproject python3-all gettext
 
+      - name: Build native Wayland fallbacks
+        run: bash packaging/deb/build-wayland-vendors.sh "$RUNNER_TEMP/docking-wayland"
+
       - name: Build .deb
+        env:
+          DOCKING_EXTRA_PYWAYLAND: ${{ runner.temp }}/docking-wayland
         run: |
           bash packaging/deb/build.sh
           mkdir -p artifacts
@@ -622,7 +627,12 @@ jobs:
             libwayland-dev wayland-protocols \
             pybuild-plugin-pyproject python3-all gettext
 
+      - name: Build native Wayland fallbacks
+        run: bash packaging/deb/build-wayland-vendors.sh "$RUNNER_TEMP/docking-wayland"
+
       - name: Build .deb
+        env:
+          DOCKING_EXTRA_PYWAYLAND: ${{ runner.temp }}/docking-wayland
         run: |
           bash packaging/deb/build.sh
           mkdir -p artifacts
@@ -1054,7 +1064,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ['ubuntu:22.04', 'ubuntu:24.04', 'debian:12', 'debian:13']
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'ubuntu:26.04', 'debian:12', 'debian:13']
         include:
           - arch: amd64
             runner: ubuntu-24.04
@@ -1069,7 +1079,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: artifacts/deb
-      - name: Install the release binary and import its runtime
+      - name: Install the release binary and exercise X11 and Wayland
         env:
           IMAGE: ${{ matrix.image }}
           PACKAGE_ARCH: ${{ matrix.arch }}
@@ -1079,13 +1089,13 @@ jobs:
           docker run --rm \
             -e DEBIAN_FRONTEND=noninteractive -e PACKAGE_ARCH \
             -v "$PWD/artifacts/deb:/packages:ro" \
-            -v "$PWD/packaging/deb/smoke.py:/smoke.py:ro" \
+            -v "$PWD/packaging/deb:/checks:ro" \
             "$IMAGE" bash -euc '
               apt-get update
-              apt-get install -y xvfb xauth /packages/docking_*_${PACKAGE_ARCH}.deb
+              apt-get install -y xvfb xauth dbus libglib2.0-bin sway /packages/docking_*_${PACKAGE_ARCH}.deb
               test "$(dpkg-query -W -f="\${Status}" docking)" = "install ok installed"
               test "$(dpkg --print-architecture)" = "$PACKAGE_ARCH"
-              xvfb-run -a /usr/bin/python3 /smoke.py
+              bash /checks/runtime-smoke.sh
             '
 
   release:

@@ -101,8 +101,11 @@ pip install -e ".[wayland]"
 
 ### Debian and Ubuntu (APT)
 
-On Ubuntu 22.04/24.04 and Debian 12/13, add Docking's APT repository once to receive
-updates through your package manager. Both amd64 and arm64 are available.
+On Ubuntu 22.04/24.04/26.04 and Debian 12/13, add Docking's APT repository once
+to receive updates through your package manager. Both amd64 and arm64 are
+available. Ubuntu derivatives that expose
+`UBUNTU_CODENAME`, including Linux Mint 21.x/22.x, use their Ubuntu base.
+Derivative desktops are not separately covered by the Debian/Ubuntu CI matrix.
 
 Download the public signing key and check its fingerprint before continuing:
 
@@ -120,10 +123,16 @@ The fingerprint must be `811B48CD4A69170DD98F4F49185CED80A7947754`.
 sudo install -d -m 0755 /etc/apt/keyrings
 sudo install -m 0644 /tmp/docking-cloudsmith.asc /etc/apt/keyrings/docking-cloudsmith.asc
 . /etc/os-release
+APT_DISTRO="$ID"
+APT_SUITE="${VERSION_CODENAME:-}"
+if [ -n "${UBUNTU_CODENAME:-}" ]; then
+    APT_DISTRO=ubuntu
+    APT_SUITE="$UBUNTU_CODENAME"
+fi
 sudo tee /etc/apt/sources.list.d/docking.sources > /dev/null <<EOF
 Types: deb
-URIs: https://dl.cloudsmith.io/public/docking/docking-apt/deb/${ID}
-Suites: ${VERSION_CODENAME}
+URIs: https://dl.cloudsmith.io/public/docking/docking-apt/deb/${APT_DISTRO}
+Suites: ${APT_SUITE}
 Components: main
 Architectures: amd64 arm64
 Signed-By: /etc/apt/keyrings/docking-cloudsmith.asc
