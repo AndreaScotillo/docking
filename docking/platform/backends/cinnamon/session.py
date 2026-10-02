@@ -39,6 +39,10 @@ class CinnamonShellSessionBackend(ReducedSessionBackend):
     def display_server(self) -> DisplayServer:
         return DisplayServer.WAYLAND
 
+    @property
+    def capabilities(self) -> PlatformCapabilities:
+        return replace(super().capabilities, supports_screen_reservation=True)
+
 
 class CinnamonWaylandSessionBackend(WaylandLayerShellSessionBackend):
     def __init__(

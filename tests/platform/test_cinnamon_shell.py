@@ -9,12 +9,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from docking.core.position import Position
 from docking.platform.backends import selection
 from docking.platform.backends.base import (
     DisplayServer,
     MonitorSnapshot,
     PlacementRequest,
     Rect,
+    ReservationRequest,
     Size,
 )
 from docking.platform.backends.cinnamon import shell
@@ -49,7 +51,7 @@ def test_shell_client_positions_only_the_identified_dock_and_returns_actual_posi
     ) == (0, 853)
     script = proxy.call_sync.call_args.args[1].unpack()[0]
     assert f"w.get_title() === {json.dumps(title)}" in script
-    assert "move_resize_frame(false, 0, 893, 1920, 187)" in script
+    assert "move_resize_frame(true, 0, 893, 1920, 187)" in script
     assert "w.stick()" in script
     assert "w.make_above()" in script
     assert proxy.call_sync.call_args.args[3] == 250
@@ -115,6 +117,65 @@ def test_shell_client_reads_panel_workarea_for_target_monitor():
     assert "wanted = [1920, 0, 1920, 1080]" in script
     assert "get_monitor_geometry(i)" in script
     assert "get_work_area_for_monitor(index)" in script
+
+
+@pytest.mark.parametrize(
+    ("edge", "rect"),
+    [
+        (Position.BOTTOM, [1920, 982, 1920, 98]),
+        (Position.TOP, [1920, 0, 1920, 98]),
+        (Position.LEFT, [1920, 0, 98, 1080]),
+        (Position.RIGHT, [3742, 0, 98, 1080]),
+    ],
+)
+def test_shell_reservation_includes_gap_and_panel_but_not_animation_surface(edge, rect):
+    proxy = _proxy(True)
+    client = shell.CinnamonShellClient(proxy=proxy)
+    request = ReservationRequest(
+        monitor=MonitorSnapshot(0, Rect(1920, 0, 1920, 1080)),
+        position=edge,
+        thickness=58,
+        edge_offset=40,
+    )
+    assert client.reserve_dock(title='Docking ["owned"]', request=request)
+    script = proxy.call_sync.call_args.args[1].unpack()[0]
+    assert f"const r = {json.dumps(rect)}" in script
+    assert "affectsInputRegion:false" in script
+    assert "connect('unmanaged'" in script
+
+
+def test_shell_external_workarea_excludes_only_own_reservation_and_restores_it():
+    proxy = _proxy([0, 0, 1920, 1040])
+    client = shell.CinnamonShellClient(proxy=proxy)
+    assert client.workarea(_request().monitor, exclude_title="Docking [owned]") == Rect(
+        0, 0, 1920, 1040
+    )
+    script = proxy.call_sync.call_args.args[1].unpack()[0]
+    assert 'global._dockingReservations?.["Docking [owned]"]' in script
+    assert "affectsStruts:false" in script
+    assert "finally" in script
+    assert "affectsStruts:true" in script
+
+
+def test_surface_retries_reservation_after_mapping_and_clears_on_stop(monkeypatch):
+    monkeypatch.setattr(shell.GLib, "timeout_add", lambda *_: 42)
+    monkeypatch.setattr(shell.GLib, "source_remove", lambda *_: None)
+    client = SimpleNamespace(
+        position_dock=MagicMock(side_effect=[None, (0, 853)]),
+        reserve_dock=MagicMock(side_effect=[False, True]),
+        clear_reservation=MagicMock(),
+    )
+    surface = shell.CinnamonShellSurfaceService(client=client)
+    surface.configure_before_realize(MagicMock())
+    surface.position_or_anchor(_request())
+    request = ReservationRequest(_request().monitor, Position.BOTTOM, 53)
+    surface.set_reservation(request)
+    assert client.reserve_dock.call_count == 1
+    surface._retry_position()
+    assert client.reserve_dock.call_count == 2
+    surface.stop()
+    client.clear_reservation.assert_called_once_with(title=surface._title)
+    assert surface._reservation is None
 
 
 def test_surface_retries_mapping_and_uses_latest_placement(monkeypatch):
@@ -184,7 +245,7 @@ def test_selection_uses_shell_when_layer_shell_is_unsupported(monkeypatch):
     assert backend.name == "cinnamon-shell"
     assert backend.display_server is DisplayServer.WAYLAND
     assert backend.capabilities.supports_layer_shell is False
-    assert backend.capabilities.supports_screen_reservation is False
+    assert backend.capabilities.supports_screen_reservation is True
     assert backend.capabilities.tracks_windows is False
 
 
