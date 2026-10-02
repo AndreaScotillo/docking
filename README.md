@@ -384,7 +384,11 @@ The first things to explore are:
 - **Folder stacks**: pin a folder and open it from the dock for quick access to
   its contents.
 - **Diagnostics**: open right-click -> **Diagnostics** when checking backend
-  support or preparing a support report.
+  support or preparing a support report. **Copy Report** or **Save Report...**
+  includes dock placement settings, monitor geometry and GDK-reported workareas,
+  architecture, and kernel version. Feature support is reported by the backend;
+  the report does not verify that each feature is working. Refresh after changing
+  settings before sharing a report with a bug report.
 
 ## Global Search
 
