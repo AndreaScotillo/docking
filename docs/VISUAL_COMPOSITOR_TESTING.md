@@ -137,6 +137,14 @@ Older sidecars without scene metadata are rejected. Regenerate them with
 to an old capture. Sway uses its own swaybar, while other adapters can use the shared
 synthetic panel. A Sway session never starts both.
 
+All 28 committed baselines now have scene metadata from fresh, independently
+verified captures. The Niri captures include the startup fix from
+[PR #353](https://github.com/edumucelli/docking/pull/353), commit
+`4dc597ff312eb67f39d034855b5bad6c5b12112e`; its vertical-edge cases require
+that fix. It was applied only in the temporary capture checkout, not added to
+this harness branch. Cinnamon reservation captures use the merged fix from
+[PR #351](https://github.com/edumucelli/docking/pull/351).
+
 **Measured on sway: the captures are bit-identical across runs** (SSIM 1.00000 / PSNR `inf` on
 an independent re-run of all five cases). `WLR_RENDERER=pixman`, a fixed theme and icon size,
 the static pinned set, and the settle loop together remove the usual sources of variation. The
