@@ -41,11 +41,9 @@ adapter_prepare() {
     export WLR_LIBINPUT_NO_DEVICES=1
     export WLR_HEADLESS_OUTPUTS="${LAB_OUTPUTS:-1}"
 
-    # Wayfire needs a config with a [core] section, but must NOT name plugins:
-    # `ipc-rules` ships in the wayfire-plugins-extra package, which does not
-    # exist in Debian, and naming a missing plugin makes wayfire exit at startup.
-    # The defaults give a working compositor, which is all this lane needs --
-    # geometry comes from pixels, not from wayfire IPC.
+    # Arch's Wayfire target includes IPC plugins. Docking needs this socket to
+    # select its native window-tracking/visibility backend; screenshots alone
+    # would only exercise generic layer-shell placement.
     mkdir -p "$(dirname "$WAYFIRE_CONFIG")"
     cat >"$WAYFIRE_CONFIG" <<'INI'
 [core]

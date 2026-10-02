@@ -1,11 +1,11 @@
 #!/bin/bash
 # COSMIC adapter (cosmic-comp): cosmic nested inside a headless sway.
 #
-# STATUS: written, NOT YET RUN. This adapter used to declare cosmic unrunnable
+# STATUS: verified for native placement. This adapter used to declare cosmic unrunnable
 # for want of a DRM device. That diagnosis was wrong for the same reason niri's
 # was -- cosmic was launched with no parent display, so it fell through to KMS,
 # and KMS is where libseat fails. The route below is the one that fixed niri,
-# read out of cosmic's source but not yet executed. Verify before trusting it.
+# verified end to end with Docking's native COSMIC backend.
 #
 # The switch is different from niri's, though. niri selects its windowed backend
 # from a display variable; cosmic reads COSMIC_BACKEND explicitly

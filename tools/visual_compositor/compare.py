@@ -247,6 +247,7 @@ def check_native_frame(*, frame: dict | None, output: dict) -> tuple[bool, str]:
 
 
 def check_output_transition(*, evidence: Path, case, record: dict) -> str | None:
+    from tools.visual_compositor.behaviour import footprint
     from tools.visual_compositor.scenarios import EDGE_BAND_PX, expected_edge_coordinate
 
     before = _load_json(evidence / f"{case.name}.before-change.json")
@@ -272,7 +273,7 @@ def check_output_transition(*, evidence: Path, case, record: dict) -> str | None
         bbox = locate_content(
             image=initial, band=band, background=_background_colour(initial)
         )
-    if bbox is None:
+    if bbox is None or footprint(path, band) < 1000:
         return "dock was never on the removed output"
     return None
 

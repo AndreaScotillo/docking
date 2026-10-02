@@ -355,7 +355,7 @@ def test_autohide_requires_both_hide_transitions(tmp_path, hidden):
     assert ok is hidden
 
 
-@pytest.mark.parametrize("on_removed", [True, False])
+@pytest.mark.parametrize("on_removed", [True, False, "cursor"])
 def test_output_removal_requires_dock_on_that_output(tmp_path, on_removed):
     case = SimpleNamespace(name="remove", display_change="remove", edge="bottom", gap=0)
     first = {"name": "HEADLESS-1", "x": 0, "y": 0, "width": 1280, "height": 720}
@@ -365,14 +365,17 @@ def test_output_removal_requires_dock_on_that_output(tmp_path, on_removed):
     )
     image = Image.new("RGB", (2560, 720), "black")
     offset = 1280 if on_removed else 0
-    ImageDraw.Draw(image).rectangle(
-        (offset + 400, 680, offset + 879, 719), fill="white"
-    )
+    if on_removed == "cursor":
+        ImageDraw.Draw(image).rectangle((1700, 685, 1710, 700), fill="white")
+    else:
+        ImageDraw.Draw(image).rectangle(
+            (offset + 400, 680, offset + 879, 719), fill="white"
+        )
     image.save(tmp_path / "remove.before-change.png")
     error = compare.check_output_transition(
         evidence=tmp_path, case=case, record={"outputs": [first]}
     )
-    assert (error is None) is on_removed
+    assert (error is None) is (on_removed is True)
 
 
 def test_scaled_screenshot_requires_logical_pixel_contract(evidence):

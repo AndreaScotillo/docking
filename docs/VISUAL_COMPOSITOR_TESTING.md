@@ -90,7 +90,8 @@ settling and shutdown checks.
 `.github/workflows/compositor.yml` runs Sway, Cinnamon and Niri on relevant PRs and
 master pushes. Weekly and manually dispatched runs add labwc, COSMIC, KWin,
 Wayfire, Cage and GNOME. Sway also runs the 16 new autohide, interaction, layout
-and output-change cases. Placement lanes require supported assertions; Cage and
+and output-change cases; Wayfire additionally checks native active-window dodge.
+Placement lanes require supported assertions; Cage and
 GNOME are explicit negative compatibility lanes. Failures retain screenshots,
 intermediate phases, geometry, input proof and logs for 14 days.
 
