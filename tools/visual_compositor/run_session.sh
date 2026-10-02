@@ -62,12 +62,17 @@ trap adapter_cleanup EXIT
 adapter_prepare
 adapter_start
 adapter_wait_ready
+if declare -F adapter_start_frame_clock >/dev/null; then adapter_start_frame_clock; fi
 
 # Before capabilities, because the panel's presence is part of what the adapter
 # reports, and before any case, so the dock always starts into the same world.
 start_lab_panel
 
-adapter_capabilities >"$EVIDENCE_DIR/capabilities.json"
+source "$HERE/input.sh"
+start_lab_input
+adapter_capabilities | jq --argjson input "$LAB_INPUT_SUPPORTED" \
+    '.pointer = $input | .interactive = ($input and .placement) | .dodge = ($input and (.expected_backend == "wayfire" or (.expected_backend == "cosmic" and .cosmic_overlap_supported == true)))' \
+    >"$EVIDENCE_DIR/capabilities.json"
 record_import_origin "$EVIDENCE_DIR/import-origin.txt"
 adapter_geometry >"$EVIDENCE_DIR/outputs.json"
 
@@ -79,7 +84,7 @@ adapter_geometry >"$EVIDENCE_DIR/outputs.json"
 #
 # Pattern follows packaging/deb/runtime-smoke.sh:48-57.
 mkdir -p "$XDG_DATA_HOME/applications"
-for probe in alpha beta gamma; do
+for probe in alpha beta gamma probe $(seq -f item-%02g 0 31); do
     cat >"$XDG_DATA_HOME/applications/lab-$probe.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -129,6 +134,9 @@ run_case() {
     echo "$case_json" | jq '.overrides' >"$config_dir/dock.json"
 
     log_adapter "case: $name"
+    if declare -F adapter_scene >/dev/null; then
+        adapter_scene "$(echo "$case_json" | jq -r ' .display_scene // empty')"
+    fi
     adapter_geometry >"$case_dir/$name.before.json"
     local reservation=false
     if [ "$(echo "$case_json" | jq -r '.maximize_window // false')" = true ] \
@@ -140,6 +148,23 @@ run_case() {
         return 0
     fi
 
+    local action change action_ok=true
+    action="$(echo "$case_json" | jq -r '.action // empty')"
+    change="$(echo "$case_json" | jq -r '.display_change // empty')"
+    local action_supported=true requirement
+    requirement="$(echo "$case_json" | jq -r '.requires // empty')"
+    if [ -n "$requirement" ] && [ "$(jq -r --arg cap "$requirement" '.[$cap] // false' "$EVIDENCE_DIR/capabilities.json")" != true ]; then
+        action_supported=false
+    fi
+    if [ -n "$action" ] && [ "$LAB_INPUT_SUPPORTED" = true ] && [ "$action_supported" = true ]; then
+        source "$HERE/actions.sh"
+        run_lab_action "$action" "$(echo "$case_json" | jq -r '.edge')" || action_ok=false
+    fi
+    if [ -n "$change" ] && declare -F adapter_change_output >/dev/null; then
+        capture_until_stable "$case_dir/$name.before-change.png" || action_ok=false
+        adapter_geometry >"$case_dir/$name.before-change.json"
+        adapter_change_output "$change" || action_ok=false
+    fi
     local settled=true
     capture_until_stable "$case_dir/$name.png" || settled=false
 
@@ -158,13 +183,19 @@ run_case() {
     # anchors popups, menus, tooltips and the dodge rectangle. Comparing it
     # against the pixels is the assertion that catches a dock reporting a
     # position it never reached -- the shape of #347.
-    local self_reported
+    local self_reported first_item last_item last_anchor
+    first_item="$(echo "$case_json" | jq -r '.overrides.pinned[0]')"
+    last_item="$(echo "$case_json" | jq -r '.overrides.pinned[-1]')"
     self_reported="$(gdbus call --session --dest org.docking.Docking \
         --object-path /org/docking/Docking \
-        --method org.docking.Docking.Items1.GetHoverAnchor lab-alpha.desktop \
+        --method org.docking.Docking.Items1.GetHoverAnchor "$first_item" \
         2>/dev/null | head -1 || true)"
 
+    last_anchor="$(gdbus call --session --dest org.docking.Docking \
+        --object-path /org/docking/Docking \
+        --method org.docking.Docking.Items1.GetHoverAnchor "$last_item" 2>/dev/null || true)"
     jq -n \
+        --arg last_anchor "$last_anchor" \
         --arg name "$name" \
         --argjson settled "$settled" \
         --arg requested "$requested" \
@@ -177,11 +208,21 @@ run_case() {
             settled: $settled,
             requested_geometry: $requested,
             self_reported_anchor: $self_reported,
+            last_item_anchor: $last_anchor,
             external_outputs: ($before[0].outputs // []),
             outputs: ($geom[0].outputs // []),
+            capture_origin: {
+                x: ([$geom[0].outputs[].x] | min),
+                y: ([$geom[0].outputs[].y] | min)
+            },
             dock_rect: ($geom[0].dock_rect // null)
         }' >"$case_dir/$name.json"
     rm -f "$case_dir/$name.raw-geometry.json"
+    if [ "$action_ok" != true ]; then
+        jq '.status="fail" | .reason="input or display action did not complete"' \
+            "$case_dir/$name.json" >"$case_dir/$name.tmp"
+        mv "$case_dir/$name.tmp" "$case_dir/$name.json"
+    fi
 
     if [ "$reservation" = true ]; then
         adapter_start_maximized_window

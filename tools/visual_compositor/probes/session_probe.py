@@ -16,11 +16,15 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 
@@ -39,9 +43,24 @@ def capabilities() -> int:
         except Exception:
             layer_shell = False
 
+    overlap = False
+    if "COSMIC" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).with_name("input_probe.py")),
+                "--globals",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            overlap = "zcosmic_overlap_notify_v1" in json.loads(result.stdout)
     json.dump(
         {
             "gtk_display_is_wayland": wayland,
+            "cosmic_overlap_supported": overlap,
             "gtk_display": type(display).__name__ if display else None,
             "layer_shell_supported": layer_shell,
         },
@@ -52,7 +71,30 @@ def capabilities() -> int:
     return 0
 
 
+def geometry() -> int:
+    Gtk.init([])
+    display = Gdk.Display.get_default()
+    outputs = []
+    for index in range(display.get_n_monitors()):
+        monitor = display.get_monitor(index)
+        rect = monitor.get_geometry()
+        outputs.append(
+            {
+                "name": f"output-{index}",
+                "x": rect.x,
+                "y": rect.y,
+                "width": rect.width,
+                "height": rect.height,
+                "scale": monitor.get_scale_factor(),
+            }
+        )
+    print(json.dumps({"outputs": outputs, "dock_rect": None}))
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "geometry":
+        return geometry()
     if len(sys.argv) > 1 and sys.argv[1] == "capabilities":
         return capabilities()
     print(__doc__, file=sys.stderr)

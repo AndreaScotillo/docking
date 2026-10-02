@@ -25,6 +25,99 @@ matrix (`docs/VISUAL_TEST_MATRIX.md`) and the confirmed-issues list
 (`docs/WAYLAND_SUPPORT_ISSUES.md`). They overlapped heavily; the overlapping material now appears
 once, and the matrix's FAIL cells point at the numbered issues instead of restating them.
 
+## Current coverage (2026-10-03)
+
+The detailed matrix and numbered findings below retain the original 2026-10-02
+investigation. This section supersedes its older statements about unverified
+adapters, unavailable pointer input and missing display-change scenarios.
+
+The matrix now defines **32 cases** across placement, monitors, reservation,
+visibility, interaction, constrained layouts and live output changes. Capabilities
+are per adapter: this is not a claim that every case runs on every desktop.
+
+| Compositor | Verified route and scope | Current limitations |
+| --- | --- | --- |
+| Sway | Headless Pixman; placement, four-edge autohide, zoom, tooltip, menu, six layouts and three output transitions | Pixel geometry; no native layer-surface allocation query or native dodge service |
+| Cinnamon | Nested Wayland in private Xvfb; native frame and all six reservation cases | Older Muffin shell bridge; no native dodge service |
+| Niri | Nested in headless Sway; five non-panel placement cases | Requires the vertical-edge startup fix in [#353](https://github.com/edumucelli/docking/pull/353); one nested output |
+| labwc | Headless wlroots; placement | No native dock-frame query |
+| COSMIC | Winit nested in headless Sway; native COSMIC placement on five cases | Overlap notification is probed at runtime; absent protocol makes dodge unsupported |
+| KWin | Nested Wayland in headless Sway, QPainter; five placement cases | Reduced visibility service; no native dodge |
+| Wayfire | Arch Wayfire 0.11, headless Pixman and IPC; five placement cases and active-window dodge | Debian's older 0.9 build needs a render device; the default lane uses Arch |
+| Cage | Real headless kiosk compositor; startup, reduced backend and shutdown | Placement intentionally unsupported |
+| GNOME/Mutter | GNOME Shell nested Wayland in private Xvfb; startup, reduced backend and shutdown | Shell extension is deliberately absent; this verifies the compatibility fallback, not native GNOME placement |
+
+### Run the additional cases
+
+```bash
+# Geometry and behavior assertions without comparing a machine-specific baseline.
+bash tools/visual_compositor_matrix.sh --compositor sway --behavior interaction --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor sway --behavior layouts --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor sway --behavior displays --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor sway --behavior visibility --case autohide-bottom --case autohide-top --case autohide-left --case autohide-right --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor wayfire --case dodge-active --geometry-only --require-supported
+
+# GNOME's expected unsupported placement still checks real app lifecycle.
+bash tools/visual_compositor_matrix.sh --compositor gnome --case placement-bottom --geometry-only
+```
+
+Layouts include a 360-pixel output, 32 launchers, scale 2, mixed output scales,
+90-degree rotation and a negative output origin. Display tests change resolution,
+change scale and remove the output holding the dock. Removal requires a capture
+showing the dock on that output before unplugging it, then checks placement on
+the remaining output. Scene tests create their own outputs; use `LAB_OUTPUTS=1`.
+Logical screenshots normalize scale without inventing compositor coordinates.
+The many-icon case checks both endpoint anchors against rendered content; it
+cannot prove native surface allocation containment on pixel-only adapters.
+
+Input uses a **persistent harness-only virtual pointer**, or XTest on the private
+outer Xvfb display. Nested desktops receive input through their parent. Before
+advertising pointer support, a real GTK client must receive motion at a known
+coordinate. The proof is saved in `input-delivery.json`. No production protocol
+bindings are changed. `GetHoverAnchor` locates an input stimulus; the assertions
+use observed pixels, not the method's answer as proof that the effect happened.
+
+Visibility cases save hidden/revealed/hidden-again or restored captures and require
+substantial disappearance and recovery of dock pixels. Zoom measures the dock
+strip, excluding tooltip content. Tooltip and menu checks require changed pixels
+above the resting dock; cursor movement and icon highlighting cannot pass them.
+These checks establish popup appearance, not popup allocation or screen-edge
+containment. Each case also retains startup, backend, frame checks where available,
+settling and shutdown checks.
+
+### CI and image maintenance
+
+`.github/workflows/compositor.yml` runs Sway, Cinnamon and Niri on relevant PRs and
+master pushes. Weekly and manually dispatched runs add labwc, COSMIC, KWin,
+Wayfire, Cage and GNOME. Sway also runs the 16 new autohide, interaction, layout
+and output-change cases. Placement lanes require supported assertions; Cage and
+GNOME are explicit negative compatibility lanes. Failures retain screenshots,
+intermediate phases, geometry, input proof and logs for 14 days.
+
+CI uses **geometry and behavior assertions**, not pixel comparisons: separately
+built images can have different image identities. Dockerfiles pin base image
+SHA256 digests, Debian/Arch package snapshots and Pywayland 0.4.19. Arch synchronizes
+the whole system with the snapshot to avoid partial upgrades. Update the digest
+and snapshot deliberately, rebuild and inspect captures before recording baselines.
+The optional build arguments are `DEBIAN_IMAGE`, `DEBIAN_SNAPSHOT`, `ARCH_IMAGE` and
+`ARCH_SNAPSHOT`; their defaults live in the Dockerfiles.
+
+For local pixel regression tests, use the same actual image that generated the
+baseline. Normal mode keeps strict image and scene provenance checks. Sixteen new
+Sway baselines accompany this expansion. `--geometry-only` never writes baselines
+and cannot be combined with `--update-baselines`. `--require-supported` turns an
+unexpected unsupported case into an unsuccessful run.
+
+### A newly observed COSMIC gap
+
+Opening a real GTK toplevel during the native COSMIC dodge experiment produced
+callback `TypeError`s in `CosmicToplevelAdapter._request_cosmic_info`: callbacks
+expected an extra argument for output/workspace events. The compositor in this
+lane also lacks the overlap-notification protocol, so dodge is explicitly
+unsupported and the scheduled placement tests do not exercise that action.
+This is a separate production follow-up; placement passing does not establish
+complete COSMIC window-tracking or visibility coverage.
+
 ## Why: what the existing lanes could not see
 
 | Lane | What it runs against | Why it misses placement bugs |
@@ -189,8 +282,8 @@ Dockerfile per base and the entry script picks between them:
 
 | Dockerfile | Base | Compositors | Why |
 | --- | --- | --- | --- |
-| `Dockerfile` | `debian:trixie` | sway, labwc, wayfire, cage, cinnamon, kwin | all packaged in Debian |
-| `Dockerfile.arch` | `archlinux:latest` | niri, cosmic | **not packaged by Debian at any version**; both are in Arch's official Extra repository, so one extra base covers both |
+| `Dockerfile` | pinned Debian trixie + snapshot | sway, labwc, cage, cinnamon, kwin, gnome | Debian packages; older Wayfire target retained for device-backed experiments |
+| `Dockerfile.arch` | pinned Arch + archive snapshot | niri, cosmic, wayfire | Newer Wayfire enables software headless rendering |
 
 Targets are built per compositor (`--target sway`, `--target niri`, …) rather than
 as one image, because Cinnamon alone pulls ~500 packages. Build one lane at a
@@ -270,7 +363,7 @@ sees one output. Monitor-selection and hotplug cases therefore cannot run on
 this lane as built — they need either a multi-output virtual backend niri
 exposes itself, or a different wiring. Do not read `monitor-*` as passing here.
 
-### Not yet verified for cosmic
+### Original COSMIC investigation (superseded above)
 
 The mechanism is the same and the reading is the same, but `COSMIC_BACKEND=winit`
 has not been run. Treat cosmic as unverified until it is. (An earlier revision of
@@ -289,7 +382,7 @@ own last output rather than a bare timeout. They work unchanged on a machine wit
 a free DRM device or a kernel with `vkms`. **Treat cosmic as unverified until run
 on such a machine.**
 
-### Support table
+### Original support table (2026-10-02; superseded above)
 
 Adapters exist for the compositors below. An adapter existing is not evidence
 that its lane works; the status distinguishes implementation from verification —
@@ -504,7 +597,7 @@ into `XDG_DATA_HOME` before the dock starts.
 If you add a case, keep this invariant: anything that renders time-varying data (clock,
 weather, system monitor, live window counts) must be excluded, or the settle loop will fail.
 
-### What this table does not cover
+### Original coverage gaps (2026-10-02; superseded above)
 
 Fifteen cases across four behaviours. The harness implements **placement,
 monitor selection and reservation**, plus frame containment checks where an adapter
@@ -1230,9 +1323,11 @@ empty-string sentinels in `common.sh` (`docs/HEADLESS_WAYLAND_TESTING.local.md:8
 ## Limitations
 
 - **sway reports no dock rect** (above). Geometry there is derived and pixel-measured.
-- **Pointer injection is not available on sway headless.** Most visibility triggers are
-  `explicitly-unsupported` until a virtual-pointer protocol is vendored — `zwlr_virtual_pointer_v1`
-  is not currently in `docking/platform/backends/wayland/protocols/`.
+- Pointer support is enabled only after the input-delivery probe succeeds. Unsupported
+  native visibility services remain unsupported even when pointer input works.
+- GNOME currently exercises the compatibility fallback without its shell extension.
+- Popup edge containment, drag-and-drop, applet rendering and fractional scaling
+  still need dedicated scenarios.
 - `WLR_RENDERER=pixman` is software rendering: correctness-representative, not
   performance-representative.
 - Baselines are scoped to the compositor **and** to the container image. A compositor, font or

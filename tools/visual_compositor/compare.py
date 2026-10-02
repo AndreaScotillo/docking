@@ -246,6 +246,37 @@ def check_native_frame(*, frame: dict | None, output: dict) -> tuple[bool, str]:
     return True, "compositor dock frame fits the output"
 
 
+def check_output_transition(*, evidence: Path, case, record: dict) -> str | None:
+    from tools.visual_compositor.scenarios import EDGE_BAND_PX, expected_edge_coordinate
+
+    before = _load_json(evidence / f"{case.name}.before-change.json")
+    if not before or before.get("outputs") == record.get("outputs"):
+        return "output change was not observed"
+    if case.display_change != "remove":
+        return None
+    removed = next(
+        (o for o in before["outputs"] if o.get("name") == "HEADLESS-2"), None
+    )
+    if not removed or any(o.get("name") == "HEADLESS-2" for o in record["outputs"]):
+        return "target output was not removed"
+    band = expected_edge_coordinate(
+        edge=case.edge, output=removed, gap=case.gap, band=EDGE_BAND_PX
+    )["rect"]
+    origin = {key: min(o[key] for o in before["outputs"]) for key in ("x", "y")}
+    band = {**band, "x": band["x"] - origin["x"], "y": band["y"] - origin["y"]}
+    path = evidence / f"{case.name}.before-change.png"
+    if not path.exists():
+        return "missing pre-removal capture"
+    with Image.open(path) as initial:
+        initial = initial.convert("RGB")
+        bbox = locate_content(
+            image=initial, band=band, background=_background_colour(initial)
+        )
+    if bbox is None:
+        return "dock was never on the removed output"
+    return None
+
+
 def check_edge(
     *,
     bbox: tuple[int, int, int, int],
@@ -384,6 +415,7 @@ def evaluate(
     compositor: str,
     capabilities: dict,
     run_meta: dict,
+    geometry_only: bool = False,
 ) -> list[Result]:
     from tools.visual_compositor.scenarios import EDGE_BAND_PX, expected_edge_coordinate
 
@@ -522,7 +554,9 @@ def evaluate(
                 continue
             output = outputs[case.output_index]
 
-        if output.get("scale", 1) != SUPPORTED_SCALE:
+        if output.get("scale", 1) != SUPPORTED_SCALE and not capabilities.get(
+            "logical_screenshot"
+        ):
             results.append(
                 Result(
                     case.name,
@@ -586,6 +620,38 @@ def evaluate(
                 results.append(Result(case.name, "fail", frame_detail))
                 continue
 
+        # Screenshots use canvas coordinates; outputs and D-Bus anchors use
+        # compositor coordinates, which can start left/above zero.
+        origin = record.get("capture_origin", {"x": 0, "y": 0})
+        canvas_band = {
+            **band["rect"],
+            "x": band["rect"]["x"] - origin["x"],
+            "y": band["rect"]["y"] - origin["y"],
+        }
+        if origin != {"x": 0, "y": 0}:
+            scene["capture_origin"] = origin
+        band = {
+            **band,
+            "rect": canvas_band,
+            "limit": band["limit"] - origin[band["axis"]],
+        }
+        if case.action:
+            from tools.visual_compositor.behaviour import check_action
+
+            action_ok, action_detail = check_action(
+                evidence=evidence_dir, case=case, band=canvas_band
+            )
+            if not action_ok:
+                results.append(Result(case.name, "fail", action_detail))
+                continue
+        if case.display_change:
+            transition_error = check_output_transition(
+                evidence=evidence_dir, case=case, record=record
+            )
+            if transition_error:
+                results.append(Result(case.name, "fail", transition_error))
+                continue
+
         with Image.open(png_path) as image:
             image = image.convert("RGB")
             background = _background_colour(image)
@@ -607,8 +673,11 @@ def evaluate(
                 )
                 continue
 
+            reported = parse_self_reported(record.get("self_reported_anchor"))
+            if reported:
+                reported = (reported[0] - origin["x"], reported[1] - origin["y"])
             reported_ok, reported_detail = check_self_report(
-                reported=parse_self_reported(record.get("self_reported_anchor")),
+                reported=reported,
                 bbox=bbox,
                 tolerance=EDGE_TOLERANCE_PX,
             )
@@ -617,6 +686,21 @@ def evaluate(
                 image.save(out_dir / f"{case.name}.capture.png")
                 results.append(Result(case.name, "fail", reported_detail))
                 continue
+
+            if case.name == "layout-many-icons":
+                last = parse_self_reported(record.get("last_item_anchor"))
+                if last is None:
+                    results.append(
+                        Result(case.name, "fail", "last pinned item has no anchor")
+                    )
+                    continue
+                last = (last[0] - origin["x"], last[1] - origin["y"])
+                fits, reason = check_self_report(reported=last, bbox=bbox, tolerance=8)
+                if not fits:
+                    results.append(
+                        Result(case.name, "fail", f"last pinned item clipped: {reason}")
+                    )
+                    continue
 
             anchor = _anchor_coordinate(bbox, band["axis"], band["end"])
             if getattr(case, "maximize_window", False):
@@ -655,7 +739,7 @@ def evaluate(
             # A committed baseline is only meaningful for the image, output
             # geometry and case definition that produced it. Verify before
             # trusting it, and never accept a baseline with no provenance.
-            if not update and baseline_path.exists():
+            if not update and not geometry_only and baseline_path.exists():
                 untrusted = check_case_provenance(
                     compositor=compositor,
                     case=case,
@@ -676,13 +760,20 @@ def evaluate(
                     )
                     continue
 
-            pixels_ok, pixel_detail, pending_crop = compare_band(
-                image=image,
-                band=band["rect"],
-                baseline_path=baseline_path,
-                output_path=out_dir / f"{case.name}.png",
-                update=update,
-            )
+            if geometry_only:
+                pixels_ok, pixel_detail, pending_crop = (
+                    True,
+                    "geometry only; pixel baseline not compared",
+                    None,
+                )
+            else:
+                pixels_ok, pixel_detail, pending_crop = compare_band(
+                    image=image,
+                    band=band["rect"],
+                    baseline_path=baseline_path,
+                    output_path=out_dir / f"{case.name}.png",
+                    update=update,
+                )
 
         results.append(
             Result(
@@ -905,7 +996,11 @@ def main() -> int:
     parser.add_argument("--behavior")
     parser.add_argument("--case", action="append", dest="only")
     parser.add_argument("--update-baselines", action="store_true")
+    parser.add_argument("--geometry-only", action="store_true")
+    parser.add_argument("--require-supported", action="store_true")
     args = parser.parse_args()
+    if args.geometry_only and args.update_baselines:
+        parser.error("--geometry-only cannot update pixel baselines")
 
     from tools.visual_compositor.scenarios import select_cases
 
@@ -923,6 +1018,7 @@ def main() -> int:
         compositor=args.compositor,
         capabilities=capabilities,
         run_meta=run_meta,
+        geometry_only=args.geometry_only,
     )
 
     if not results:
@@ -968,7 +1064,7 @@ def main() -> int:
     if unsupported:
         summary += f", {unsupported} explicitly unsupported"
     print(f"\n{summary} on {args.compositor}")
-    return 1 if failures else 0
+    return 1 if failures or (args.require_supported and unsupported) else 0
 
 
 if __name__ == "__main__":

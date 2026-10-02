@@ -31,6 +31,8 @@ adapter_capabilities() {
         compositor: "sway",
         expected_backend: "wayland-layer-shell",
         native_geometry: false,
+        logical_screenshot: true,
+        output_changes: true,
         pointer: false,
         placement: $probe.layer_shell_supported,
         multi_output: $multi,
@@ -128,7 +130,7 @@ adapter_wait_ready() {
 
 adapter_screenshot() {
     local path="$1"
-    grim "$path"
+    timeout 15 grim -s 1 "$path"
 }
 
 # Output layout only. `dock_rect` is deliberately null on sway: there is no
@@ -137,7 +139,7 @@ adapter_screenshot() {
 adapter_geometry() {
     swaymsg -t get_outputs \
         | jq '{
-            outputs: [ .[] | {
+            outputs: [ .[] | select(.active) | {
                 name: .name,
                 x: .rect.x, y: .rect.y,
                 width: .rect.width, height: .rect.height,
@@ -147,15 +149,55 @@ adapter_geometry() {
           }'
 }
 
-adapter_pointer() {
-    local x="$1"
-    local y="$2"
-    swaymsg seat - cursor set "$x" "$y" >/dev/null
+adapter_scene() {
+    local scene="${1:-}"
+    swaymsg 'output HEADLESS-1 enable scale 1 transform normal' >/dev/null
+    swaymsg "output HEADLESS-1 resolution ${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720} position 0 0" >/dev/null
+    if swaymsg -t get_outputs | jq -e 'any(.[]; .name == "HEADLESS-2")' >/dev/null; then
+        if [ "${LAB_OUTPUTS:-1}" -gt 1 ]; then
+            swaymsg "output HEADLESS-2 enable scale 1 transform normal resolution ${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720} position ${LAB_WIDTH:-1280} 0" >/dev/null
+        else swaymsg 'output HEADLESS-2 disable' >/dev/null; fi
+    fi
+    case "$scene" in
+        narrow) swaymsg 'output HEADLESS-1 resolution 360x720' >/dev/null ;;
+        scale2) swaymsg 'output HEADLESS-1 scale 2' >/dev/null ;;
+        rotated) swaymsg 'output HEADLESS-1 transform 90' >/dev/null ;;
+        dual|mixed|negative)
+            if ! swaymsg -t get_outputs | jq -e 'any(.[]; .name == "HEADLESS-2")' >/dev/null; then
+                swaymsg create_output >/dev/null
+            fi
+            swaymsg "output HEADLESS-2 enable scale 1 transform normal resolution ${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720} position ${LAB_WIDTH:-1280} 0" >/dev/null
+            if [ "$scene" = mixed ]; then
+                swaymsg 'output HEADLESS-1 scale 2' >/dev/null
+                swaymsg 'output HEADLESS-2 position 640 0' >/dev/null
+            elif [ "$scene" = negative ]; then
+                swaymsg 'output HEADLESS-2 position -1280 0' >/dev/null
+            fi ;;
+    esac
+    sleep 0.5
 }
+
+adapter_change_output() {
+    case "$1" in
+        resolution) swaymsg 'output HEADLESS-1 resolution 800x600' >/dev/null ;;
+        scale) swaymsg 'output HEADLESS-1 scale 2' >/dev/null ;;
+        remove) swaymsg 'output HEADLESS-2 disable' >/dev/null ;;
+        *) return 1 ;;
+    esac
+    sleep 1
+}
+
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     if [ -n "$ADAPTER_COMPOSITOR_PID" ]; then
         terminate_pid "$ADAPTER_COMPOSITOR_PID"
         ADAPTER_COMPOSITOR_PID=""
     fi
+}
+
+adapter_start_frame_clock() {
+    /usr/bin/python3 "$LAB_SCRIPTS/probes/frame_probe.py" >"$LAB_DIR/background.log" 2>&1 &
+    ADAPTER_FRAME_PID=$!
+    sleep 0.5
 }

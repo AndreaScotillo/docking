@@ -30,7 +30,14 @@ adapter_prepare() {
     export GDK_BACKEND=wayland
 
     export WLR_BACKENDS=headless
-    export WLR_RENDERER=pixman
+    if [ -n "${WLR_RENDER_DRM_DEVICE:-}" ]; then
+        export WLR_RENDERER=gles2
+    else
+        # Newer Wayfire/wlroots supports software rendering; the compositor's
+        # startup gate reports if this image still requires a render node.
+        unset WLR_RENDER_DRM_DEVICE
+        export WLR_RENDERER=pixman
+    fi
     export WLR_LIBINPUT_NO_DEVICES=1
     export WLR_HEADLESS_OUTPUTS="${LAB_OUTPUTS:-1}"
 
@@ -42,6 +49,7 @@ adapter_prepare() {
     mkdir -p "$(dirname "$WAYFIRE_CONFIG")"
     cat >"$WAYFIRE_CONFIG" <<'INI'
 [core]
+plugins = ipc ipc-rules place grid move resize
 close_top_view = false
 INI
 }
@@ -59,7 +67,9 @@ adapter_wait_ready() {
         kill -0 "$ADAPTER_COMPOSITOR_PID"
         if grim "$probe" 2>/dev/null; then
             rm -f "$probe"
-            return 0
+            for socket in "$XDG_RUNTIME_DIR"/wayfire* /tmp/wayfire*.socket; do
+                if [ -S "$socket" ]; then export WAYFIRE_SOCKET="$socket"; return 0; fi
+            done
         fi
         sleep 0.25
     done
@@ -85,10 +95,7 @@ adapter_geometry() {
           dock_rect: null}'
 }
 
-adapter_pointer() {
-    log_adapter "pointer injection is not implemented for wayfire"
-    return 1
-}
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     if [ -n "$ADAPTER_COMPOSITOR_PID" ]; then

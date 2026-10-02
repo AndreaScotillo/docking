@@ -66,6 +66,7 @@ adapter_capabilities() {
   "compositor": "cosmic",
   "expected_backend": "cosmic",
   "native_geometry": false,
+  "cosmic_overlap_supported": $(echo "$probe" | jq '.cosmic_overlap_supported // false'),
   "pointer": false,
   "placement": $(if [ "$(echo "$probe" | jq -r '.layer_shell_supported')" = true ]; then echo true; else echo false; fi),
   "screenshot_method": "grim",
@@ -124,6 +125,7 @@ adapter_start() {
         log_adapter "parent sway never published a Wayland socket"
         return 1
     fi
+    export LAB_PARENT_DISPLAY="$parent_display"
     log_adapter "parent sway up on $parent_display"
     sleep 2
 
@@ -190,10 +192,7 @@ adapter_geometry() {
           dock_rect: null}'
 }
 
-adapter_pointer() {
-    log_adapter "pointer injection is not implemented for cosmic"
-    return 1
-}
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     # Child first: the nested compositor is a client of the parent.
