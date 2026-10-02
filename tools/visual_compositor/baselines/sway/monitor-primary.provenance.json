@@ -29,5 +29,24 @@
     "width": 1280,
     "x": 1280,
     "y": 0
+  },
+  "scene": {
+    "case_panel": 0,
+    "crop": {
+      "height": 320,
+      "width": 1280,
+      "x": 1280,
+      "y": 400
+    },
+    "panel": {
+      "height": 0,
+      "position": "bottom"
+    },
+    "workarea": {
+      "height": 720,
+      "width": 1280,
+      "x": 1280,
+      "y": 0
+    }
   }
 }

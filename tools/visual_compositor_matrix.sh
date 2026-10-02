@@ -90,14 +90,17 @@ fi
 # checked before any baseline is trusted.
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 "$PYTHON" - "$RUN_DIR/run-meta.json" "$IMAGE_ID" "$IMAGE" "$COMPOSITOR" \
-    "${LAB_OUTPUTS:-1}" "${LAB_WIDTH:-1280}" "${LAB_HEIGHT:-720}" <<'RUNMETA'
+    "${LAB_OUTPUTS:-1}" "${LAB_WIDTH:-1280}" "${LAB_HEIGHT:-720}" \
+    "${LAB_PANEL_HEIGHT:-0}" "${LAB_PANEL_POSITION:-bottom}" <<'RUNMETA'
 import json, sys
 path, image_id, image_ref, compositor, count, width, height = sys.argv[1:8]
+panel_height, panel_position = sys.argv[8:10]
 json.dump(
     {
         "image_id": image_id,
         "image_ref": image_ref,
         "compositor": compositor,
+        "panel": {"height": int(panel_height), "position": panel_position},
         "outputs": [
             {"count": int(count), "width": int(width), "height": int(height), "scale": 1}
         ],

@@ -42,6 +42,8 @@ adapter_capabilities() {
 }
 
 adapter_prepare() {
+    # Sway owns swaybar; do not also launch the shared synthetic panel.
+    export LAB_PANEL_PROBE=0
     COMPOSITOR_LOG="${LAB_DIR}/sway.log"
     local outputs="${LAB_OUTPUTS:-1}"
     local width="${LAB_WIDTH:-1280}"

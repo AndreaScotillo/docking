@@ -67,7 +67,7 @@ adapter_capabilities() {
 {
   "compositor": "niri",
   "expected_backend": "niri",
-  "native_geometry": true,
+  "native_geometry": false,
   "pointer": false,
   "placement": $(if [ "$(echo "$probe" | jq -r '.layer_shell_supported')" = true ]; then echo true; else echo false; fi),
   "panel": $(if [ "${LAB_PANEL_HEIGHT:-0}" -gt 0 ]; then echo true; else echo false; fi),

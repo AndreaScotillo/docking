@@ -113,8 +113,8 @@ Every cell in the case matrix is one of these states.
 | Mark | Meaning |
 | --- | --- |
 | **PASS** | Ran, produced evidence, all assertions held |
-| **FAIL** | Ran, produced evidence, an assertion broke — **this is a finding about Docking** |
-| **UNSUP** | The lane cannot run this case; the adapter states why. Not a pass, not a failure |
+| **FAIL** | Startup, backend selection, shutdown or an assertion failed; inspect the evidence to distinguish a Docking finding from a harness fault |
+| **UNSUP** | The adapter lacks a case capability, but Docking's startup, expected backend and shutdown were verified. Not a placement pass |
 | **BLOCKED** | The compositor never started, so no case ran |
 | *(harness)* | The `UNSUP` is the harness's own gap — the adapter lacks the capability, not the compositor |
 | **FLAKY** | A fourth state: the same binary and configuration pass in one run and fail in another — diagnosed in issue 7 |
@@ -122,7 +122,8 @@ Every cell in the case matrix is one of these states.
 ### Provenance
 
 Baselines are only trusted when their per-case sidecar proves they are still applicable. Each
-sidecar records the image identity, the output geometry, the edge and gap, and the full case
+sidecar records the image identity, the output geometry, panel height and position,
+effective workarea, crop rectangle, the edge and gap, and the full case
 configuration — and all of them are *required* and compared. Missing metadata fails rather than
 being skipped: absent provenance is not agreement. Baselines are also written only after every
 assertion in a run has passed, so a failed run cannot leave behind a baseline recorded from a
@@ -130,6 +131,11 @@ bad state.
 
 Baselines are scoped to the compositor **and** to the container image (see Limitations), so a
 compositor, font or icon-theme change invalidates them.
+
+Older sidecars without scene metadata are rejected. Regenerate them with
+`--update-baselines` in the intended panel configuration; do not add guessed metadata
+to an old capture. Sway uses its own swaybar, while other adapters can use the shared
+synthetic panel. A Sway session never starts both.
 
 **Measured on sway: the captures are bit-identical across runs** (SSIM 1.00000 / PSNR `inf` on
 an independent re-run of all five cases). `WLR_RENDERER=pixman`, a fixed theme and icon size,
@@ -289,7 +295,7 @@ that its lane works; the status distinguishes implementation from verification �
 | labwc | written, unverified | debian | `WLR_BACKENDS=headless` | derived + pixels | no |
 | wayfire | written, unverified | debian | `WLR_BACKENDS=headless` | derived + pixels | no |
 | cage | written, unverified | debian | `WLR_BACKENDS=headless` | derived + pixels | no |
-| **niri** | **verified** — 5/6 placement; its 2 original failures were a Docking protocol violation the other lanes tolerate, now fixed (issue 6) | **arch** | nested: `sway` (headless) → `niri` (winit backend) | **`niri msg outputs` (exact)** | no |
+| **niri** | **verified** — 5/6 placement; its 2 original failures were a Docking protocol violation the other lanes tolerate, now fixed (issue 6) | **arch** | nested: `sway` (headless) → `niri` (winit backend) | **dock pixels; `niri msg outputs` gives exact output geometry** | no |
 | cosmic | written, **not yet run** | **arch** | `COSMIC_BACKEND=winit` inside a lab compositor | derived + pixels | no |
 
 Sway and Cinnamon reservation cases have been run end to end. Cinnamon is the
@@ -493,7 +499,9 @@ weather, system monitor, live window counts) must be excluded, or the settle loo
 ### What this table does not cover
 
 Fifteen cases across four behaviours. The harness implements **placement,
-monitor selection and reservation**, plus a surface-allocation assertion. Not
+monitor selection and reservation**, plus frame containment checks where an adapter
+provides the actual native dock frame. Pixel-only lanes (including Sway and niri)
+cannot prove that the surface allocation fits on screen. Not
 implemented, on any compositor:
 
 - **visibility** — autohide, dodge, overlap, reveal. Blocked on input, not on
@@ -549,6 +557,10 @@ before being treated as settled.
 ### 0. Docking cannot see a panel on Wayland, and its exclusive zone pushes the panel off the screen edge
 
 **[reproduced]** on sway, 2026-10-02 — with a screenshot.
+
+Rechecked after disabling the duplicate synthetic panel on Sway: with only
+the 40px swaybar, `placement-bottom-panel` still fails, overshooting the expected
+edge by 39px. The older capture below predates that harness correction.
 
 **Symptom.** With a 40px swaybar at the bottom, launching Docking places the
 **dock at the very bottom of the screen and pushes the panel up above it**. A
@@ -1173,6 +1185,11 @@ SIGTERM→10s→SIGUSR1→SIGKILL shutdown escalation.
 | `adapter_pointer <x> <y>` | move the pointer, or fail |
 | `adapter_stop` | terminate only owned PIDs |
 
+Set `native_geometry: true` only when `adapter_geometry` provides the actual dock
+frame, not just output geometry. Such lanes fail if the frame is missing, empty or
+extends beyond the selected output (with an 8px tolerance). The visible dock's
+edge relationship is checked separately, so animation headroom is allowed.
+
 ### Gotchas that cost a run
 
 **A bare `x="$(cmd)"` aborts the session when `cmd` fails.** An assignment takes
@@ -1212,11 +1229,9 @@ empty-string sentinels in `common.sh` (`docs/HEADLESS_WAYLAND_TESTING.local.md:8
   performance-representative.
 - Baselines are scoped to the compositor **and** to the container image. A compositor, font or
   icon-theme change invalidates them; regenerate with `--update-baselines`.
-- **Baselines are not scoped to the session's panel.** The synthetic panel runs for the whole
-  session, so a run with `LAB_PANEL_HEIGHT` set changes the capture for *every* case, not just
-  `placement-bottom-panel`. Comparing such a run against baselines recorded without a panel
-  reports pixel failures on cases whose geometry is fine. Either record baselines in the same
-  panel configuration you intend to compare against, or key the baseline path on it — the current
-  behaviour is a trap, not a design decision.
+- **Panels run for the whole session.** `LAB_PANEL_HEIGHT` changes the capture for
+  every case, not just `placement-bottom-panel`. Panel configuration, workarea and
+  crop are checked against baseline provenance before pixel comparison. The baseline
+  path still holds one scene per case; regenerate when changing the scene.
 - This harness is expected to *surface* real seam bugs. Those are findings to triage, not
   harness defects.

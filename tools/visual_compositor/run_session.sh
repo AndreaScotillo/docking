@@ -173,6 +173,7 @@ run_case() {
         --slurpfile geom "$case_dir/$name.raw-geometry.json" \
         '{
             name: $name,
+            started: true,
             settled: $settled,
             requested_geometry: $requested,
             self_reported_anchor: $self_reported,
@@ -193,6 +194,11 @@ run_case() {
         mv "$case_dir/$name.tmp" "$case_dir/$name.json"
     fi
 
+    if ! kill -0 "$ADAPTER_APP_PID" 2>/dev/null; then
+        jq '.status = "fail" | .reason = "docking exited during the case"' \
+            "$case_dir/$name.json" >"$case_dir/$name.tmp"
+        mv "$case_dir/$name.tmp" "$case_dir/$name.json"
+    fi
     if ! assert_no_startup_failure "$case_dir/$name.log"; then
         jq '.status = "fail" | .reason = "startup failure signature in log"' \
             "$case_dir/$name.json" >"$case_dir/$name.tmp" \
@@ -202,16 +208,21 @@ run_case() {
     # A teardown failure is a result, not noise: a dock that will not exit can
     # still be running against the compositor while the next case starts, so it
     # must fail this case rather than be discarded.
+    local stopped=true
     if [ "$reservation" = true ] && [ "$(echo "$case_json" | jq -r '.crash_dock // false')" = true ]; then
         kill -KILL "$ADAPTER_APP_PID"
         wait "$ADAPTER_APP_PID" 2>/dev/null || true
         ADAPTER_APP_PID=""
     elif ! stop_docking; then
+        stopped=false
         jq '.status = "fail"
             | .reason = "docking failed to shut down within 10s"' \
             "$case_dir/$name.json" >"$case_dir/$name.tmp" \
             && mv "$case_dir/$name.tmp" "$case_dir/$name.json"
     fi
+    jq --argjson stopped "$stopped" '.stopped = $stopped' \
+        "$case_dir/$name.json" >"$case_dir/$name.tmp"
+    mv "$case_dir/$name.tmp" "$case_dir/$name.json"
     if [ "$reservation" = true ]; then
         adapter_reservation >"$case_dir/$name.released.json"
         jq --slurpfile released "$case_dir/$name.released.json" \

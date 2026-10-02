@@ -250,7 +250,7 @@ start_docking() {
 
     local ready=false
     for _ in $(seq 60); do
-        kill -0 "$ADAPTER_APP_PID"
+        kill -0 "$ADAPTER_APP_PID" 2>/dev/null || break
         if gdbus call --session --dest org.docking.Docking \
             --object-path /org/docking/Docking \
             --method org.docking.Docking.Items1.GetCount >/dev/null 2>&1; then

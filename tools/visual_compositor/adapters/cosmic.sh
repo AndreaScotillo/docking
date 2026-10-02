@@ -64,7 +64,7 @@ adapter_capabilities() {
     cat <<JSON
 {
   "compositor": "cosmic",
-  "expected_backend": "wayland-layer-shell",
+  "expected_backend": "cosmic",
   "native_geometry": false,
   "pointer": false,
   "placement": $(if [ "$(echo "$probe" | jq -r '.layer_shell_supported')" = true ]; then echo true; else echo false; fi),

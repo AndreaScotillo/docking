@@ -74,6 +74,7 @@ SUPPORTED_SCALE = 1
 # animation surface (163px) instead of its resting shelf (53px) -- a difference
 # of ~110px that a one-sided check reports as a comfortable pass.
 RESERVATION_SLACK_PX = 12
+FRAME_TOLERANCE_PX = 8
 
 # A case needing a capability the adapter does not provide. Reported as
 # explicitly-unsupported, never as a pass and never silently dropped.
@@ -87,6 +88,7 @@ class PendingBaseline:
     crop: Image.Image
     case: object
     output: dict
+    scene: dict
 
 
 @dataclass
@@ -222,10 +224,26 @@ def _overflow_amount(bbox: tuple[int, int, int, int], output: dict) -> int:
     return max(
         x - left,
         y - top,
-        right - (x + width),
-        bottom - (y + height),
+        right - (x + width - 1),
+        bottom - (y + height - 1),
         0,
     )
+
+
+def check_native_frame(*, frame: dict | None, output: dict) -> tuple[bool, str]:
+    """Check the compositor's complete frame, including pixels clipped by capture."""
+    if not frame:
+        return False, "no compositor-reported dock frame"
+    try:
+        x, y, width, height = (frame[key] for key in ("x", "y", "width", "height"))
+        if width <= 0 or height <= 0:
+            return False, "compositor reported an empty dock frame"
+        overflow = _overflow_amount((x, y, x + width - 1, y + height - 1), output)
+    except (KeyError, TypeError):
+        return False, "invalid compositor-reported dock frame"
+    if overflow > FRAME_TOLERANCE_PX:
+        return False, f"compositor dock frame extends {overflow}px beyond the output"
+    return True, "compositor dock frame fits the output"
 
 
 def check_edge(
@@ -409,6 +427,41 @@ def evaluate(
             results.append(Result(case.name, UNSUPPORTED, "not selected for this run"))
             continue
 
+        # Lifecycle is required even when placement is unsupported (the Cage
+        # compatibility lane). Never turn a recorded crash into an UNSUP result.
+        if not json_path.exists():
+            results.append(Result(case.name, "fail", "no session evidence produced"))
+            continue
+        try:
+            record = json.loads(json_path.read_text())
+        except (OSError, ValueError):
+            results.append(Result(case.name, "fail", "invalid session evidence"))
+            continue
+        if not isinstance(record, dict):
+            results.append(Result(case.name, "fail", "invalid session evidence"))
+            continue
+        if record.get("status") == "fail":
+            results.append(
+                Result(case.name, "fail", record.get("reason", "session failed"))
+            )
+            continue
+        if record.get("started") is not True or record.get("stopped") is not True:
+            results.append(
+                Result(case.name, "fail", "startup/shutdown evidence missing")
+            )
+            continue
+        if not expected_backend or not _backend_selected(
+            evidence_dir, case.name, expected_backend
+        ):
+            results.append(
+                Result(
+                    case.name,
+                    "fail",
+                    f"expected backend {expected_backend!r} not verified",
+                )
+            )
+            continue
+
         # A capability the adapter says it does not have. Report it as
         # unsupported with the adapter's own explanation when it gives one,
         # never as a pass and never as a silent skip -- an absent capability is
@@ -424,31 +477,14 @@ def evaluate(
                 Result(
                     case.name,
                     UNSUPPORTED,
-                    reason or f"{compositor} does not provide {case.requires!r}",
+                    (reason or f"{compositor} does not provide {case.requires!r}")
+                    + "; startup, backend and shutdown verified",
                 )
             )
             continue
 
-        if not png_path.exists() or not json_path.exists():
-            # The container records why it gave up -- "docking did not start",
-            # "startup failure signature in log" -- and that reason is the whole
-            # diagnosis. Reporting a bare "no evidence produced" threw it away
-            # and made a crash look like a missing file.
-            detail = "no evidence produced"
-            if json_path.exists():
-                try:
-                    recorded = json.loads(json_path.read_text())
-                except (OSError, ValueError):
-                    recorded = {}
-                if recorded.get("status") == "fail" and recorded.get("reason"):
-                    detail = f"no capture: {recorded['reason']}"
-            results.append(Result(case.name, "fail", detail))
-            continue
-
-        record = json.loads(json_path.read_text())
-        if record.get("status") == "fail":
-            reason = record.get("reason", "container-side failure")
-            results.append(Result(case.name, "fail", reason))
+        if not png_path.exists():
+            results.append(Result(case.name, "fail", "no capture produced"))
             continue
 
         outputs = record.get("outputs") or []
@@ -497,30 +533,6 @@ def evaluate(
             )
             continue
 
-        # Backend assertion. A missing log is a failure, not a reason to skip
-        # the check: silently not verifying is how a fallback goes unnoticed.
-        log_path = evidence_dir / f"{case.name}.log"
-        if expected_backend:
-            if not log_path.exists():
-                results.append(
-                    Result(
-                        case.name,
-                        "fail",
-                        f"no log to verify backend {expected_backend!r} against",
-                    )
-                )
-                continue
-            log_text = log_path.read_text(errors="replace")
-            if f"Selected session backend: {expected_backend}" not in log_text:
-                results.append(
-                    Result(
-                        case.name,
-                        "fail",
-                        f"expected backend {expected_backend!r} not selected",
-                    )
-                )
-                continue
-
         if not record.get("settled", True):
             results.append(
                 Result(case.name, "fail", "capture never stabilised within budget")
@@ -548,6 +560,31 @@ def evaluate(
             band=EDGE_BAND_PX,
             panel=getattr(case, "panel", 0),
         )
+        panel = run_meta.get("panel")
+        if not isinstance(panel, dict) or not {"height", "position"} <= panel.keys():
+            results.append(
+                Result(
+                    case.name,
+                    "fail",
+                    "panel configuration missing from run metadata; rerun the session",
+                )
+            )
+            continue
+        scene = {
+            "panel": run_meta["panel"],
+            "case_panel": case.panel,
+            "workarea": {
+                key: usable_output[key] for key in ("x", "y", "width", "height")
+            },
+            "crop": band["rect"],
+        }
+        if capabilities.get("native_geometry") is True:
+            frame_ok, frame_detail = check_native_frame(
+                frame=record.get("dock_rect"), output=output
+            )
+            if not frame_ok:
+                results.append(Result(case.name, "fail", frame_detail))
+                continue
 
         with Image.open(png_path) as image:
             image = image.convert("RGB")
@@ -566,25 +603,6 @@ def evaluate(
                         "fail",
                         f"no dock content found in the {case.edge} band "
                         f"{band['rect']} (background={background})",
-                    )
-                )
-                continue
-
-            # The content must lie inside the output. A dock that does not
-            # shrink when the compositor grants it less room overflows or is
-            # clipped -- the #337 class -- and that is invisible to an
-            # edge-distance check alone, which only looks at one side.
-            overflow = _overflow_amount(bbox, output)
-            if overflow > EDGE_TOLERANCE_PX:
-                out_dir.mkdir(parents=True, exist_ok=True)
-                image.save(out_dir / f"{case.name}.capture.png")
-                results.append(
-                    Result(
-                        case.name,
-                        "fail",
-                        f"dock content extends {overflow}px beyond the output "
-                        f"{output.get('width')}x{output.get('height')} "
-                        f"(content {bbox})",
                     )
                 )
                 continue
@@ -639,7 +657,11 @@ def evaluate(
             # trusting it, and never accept a baseline with no provenance.
             if not update and baseline_path.exists():
                 untrusted = check_case_provenance(
-                    compositor=compositor, case=case, output=output, run_meta=run_meta
+                    compositor=compositor,
+                    case=case,
+                    output=output,
+                    run_meta=run_meta,
+                    scene=scene,
                 )
                 if untrusted:
                     results.append(
@@ -671,7 +693,9 @@ def evaluate(
                 anchor,
                 geometry_ok=True,
                 pending=(
-                    PendingBaseline(crop=pending_crop, case=case, output=output)
+                    PendingBaseline(
+                        crop=pending_crop, case=case, output=output, scene=scene
+                    )
                     if pending_crop is not None
                     else None
                 ),
@@ -757,6 +781,18 @@ def _load_json(path: Path) -> dict | None:
         return None
 
 
+def _backend_selected(
+    evidence_dir: Path, case_name: str, expected_backend: str
+) -> bool:
+    """Verify backend selection independently of geometry support."""
+    path = evidence_dir / f"{case_name}.log"
+    return (
+        path.exists()
+        and f"Selected session backend: {expected_backend} ("
+        in path.read_text(errors="replace")
+    )
+
+
 def baseline_provenance_path(*, compositor: str, case_name: str) -> Path:
     """Per-case sidecar.
 
@@ -785,6 +821,7 @@ def commit_baseline(
         "edge": case.edge,
         "gap": case.gap,
         "config": case.overrides,
+        "scene": pending.scene,
     }
     baseline_provenance_path(compositor=compositor, case_name=case.name).write_text(
         json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -793,7 +830,7 @@ def commit_baseline(
 
 
 def check_case_provenance(
-    *, compositor: str, case: object, output: dict, run_meta: dict
+    *, compositor: str, case: object, output: dict, run_meta: dict, scene: dict
 ) -> str | None:
     """Return a reason this case's baseline cannot be trusted, or None."""
     path = baseline_provenance_path(compositor=compositor, case_name=case.name)
@@ -803,6 +840,11 @@ def check_case_provenance(
     data = _load_json(path)
     if not data:
         return f"{path.name} is empty or unreadable"
+    if data.get("scene") != scene:
+        return (
+            "baseline scene differs or is missing (panel, workarea or crop); "
+            "regenerate the baseline"
+        )
 
     recorded_image = data.get("image_id")
     current_image = run_meta.get("image_id")
