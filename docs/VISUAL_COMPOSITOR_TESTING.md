@@ -31,8 +31,8 @@ The detailed matrix and numbered findings below retain the original 2026-10-02
 investigation. This section supersedes its older statements about unverified
 adapters, unavailable pointer input and missing display-change scenarios.
 
-The matrix now defines **32 cases** across placement, monitors, reservation,
-visibility, interaction, constrained layouts and live output changes. Capabilities
+The matrix now defines **33 cases** across placement, monitors, reservation,
+visibility, interaction, native window lifecycle, constrained layouts and live output changes. Capabilities
 are per adapter: this is not a claim that every case runs on every desktop.
 
 | Compositor | Verified route and scope | Current limitations |
@@ -41,11 +41,12 @@ are per adapter: this is not a claim that every case runs on every desktop.
 | Cinnamon | Nested Wayland in private Xvfb; native frame and all six reservation cases | Older Muffin shell bridge; no native dodge service |
 | Niri | Nested in headless Sway; five non-panel placement cases | Requires the vertical-edge startup fix in [#353](https://github.com/edumucelli/docking/pull/353); one nested output |
 | labwc | Headless wlroots; placement | No native dock-frame query |
-| COSMIC | Winit nested in headless Sway; native COSMIC placement on five cases | Overlap notification is probed at runtime; absent protocol makes dodge unsupported |
+| COSMIC | Winit nested in headless Sway; five placement cases and native window open/close | Overlap notification is probed at runtime; absent protocol makes dodge unsupported |
 | KWin | Nested Wayland in headless Sway, QPainter; five placement cases | Reduced visibility service; no native dodge |
 | Wayfire | Arch Wayfire 0.11, headless Pixman and IPC; five placement cases and active-window dodge | Debian's older 0.9 build needs a render device; the default lane uses Arch |
 | Cage | Real headless kiosk compositor; startup, reduced backend and shutdown | Placement intentionally unsupported |
-| GNOME/Mutter | GNOME Shell nested Wayland in private Xvfb; startup, reduced backend and shutdown | Shell extension is deliberately absent; this verifies the compatibility fallback, not native GNOME placement |
+| GNOME/Mutter (`gnome`) | GNOME Shell nested Wayland in private Xvfb; startup, reduced backend and shutdown | Shell extension deliberately absent; compatibility fallback |
+| GNOME bridge (`gnome-bridge`) | Same private Shell with the shipped bridge; native Mutter frames, four-edge placement, 40px gap and window open/close | Single output; Shell panel hidden for a deterministic canvas; no native dodge or reservation coverage |
 
 ### Run the additional cases
 
@@ -89,8 +90,9 @@ settling and shutdown checks.
 
 `.github/workflows/compositor.yml` runs Sway, Cinnamon and Niri on relevant PRs and
 master pushes. Weekly and manually dispatched runs add labwc, COSMIC, KWin,
-Wayfire, Cage and GNOME. Sway also runs the 16 new autohide, interaction, layout
+Wayfire, Cage, GNOME fallback and native GNOME bridge. Sway also runs the 16 new autohide, interaction, layout
 and output-change cases; Wayfire additionally checks native active-window dodge.
+The COSMIC and GNOME bridge lanes additionally check native window open/close.
 Placement lanes require supported assertions; Cage and
 GNOME are explicit negative compatibility lanes. Failures retain screenshots,
 intermediate phases, geometry, input proof and logs for 14 days.
@@ -109,15 +111,44 @@ Sway baselines accompany this expansion. `--geometry-only` never writes baseline
 and cannot be combined with `--update-baselines`. `--require-supported` turns an
 unexpected unsupported case into an unsuccessful run.
 
-### A newly observed COSMIC gap
+### Native GNOME and window lifecycle
 
-Opening a real GTK toplevel during the native COSMIC dodge experiment produced
-callback `TypeError`s in `CosmicToplevelAdapter._request_cosmic_info`: callbacks
-expected an extra argument for output/workspace events. The compositor in this
-lane also lacks the overlap-notification protocol, so dodge is explicitly
-unsupported and the scheduled placement tests do not exercise that action.
-This is a separate production follow-up; placement passing does not establish
-complete COSMIC window-tracking or visibility coverage.
+```sh
+bash tools/visual_compositor_matrix.sh --compositor gnome-bridge \
+  --case placement-bottom --case placement-top --case placement-left \
+  --case placement-right --case placement-bottom-gap --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor gnome-bridge \
+  --behavior windows --geometry-only --require-supported
+bash tools/visual_compositor_matrix.sh --compositor cosmic \
+  --behavior windows --geometry-only --require-supported
+```
+
+The positive GNOME lane copies the shipped extension into the run's private
+`XDG_DATA_HOME`, enables it through Shell's extension API, and waits for a real
+bridge call to succeed. A separate harness-only extension reads the actual Mutter
+window frame and output rectangles. It does not use Docking's cached placement
+or add a production API. Shell settings stay in the disposable container. The
+observer hides the overview and panel, disables animations and uses a black
+background. The input probe avoids GNOME's hot corner; geometry queries reject
+an open overview rather than measuring transformed window thumbnails.
+
+The `window-open-close` case opens a real maximized GTK Wayland client. Native
+compositor window lists must show absent → present → absent, and Docking must
+add its launcher while it is open. This does not expect Docking's recent-app
+item to disappear on closure. Missing evidence, callback tracebacks, failed
+startup and failed teardown fail the case. Window tracking does not depend on
+pointer injection or an overlap-notification protocol.
+
+This case reproduces the COSMIC callback errors observed in the original dodge
+experiment. [#357](https://github.com/edumucelli/docking/pull/357) fixes missing
+output/workspace interface metadata in the toplevel bindings: PyWayland was
+dropping untyped object arguments. The real COSMIC lifecycle fails with the old
+bindings and passes with that fix. Merge #357 before enabling the COSMIC lifecycle
+lane. Absent overlap notification still makes native dodge unsupported.
+
+Six native GNOME baselines have their own `gnome-bridge` directory and image
+provenance. Regenerate and verify them against the same image, as for other
+compositors. The plain `gnome` lane remains a negative compatibility test.
 
 ## Why: what the existing lanes could not see
 
@@ -1326,7 +1357,9 @@ empty-string sentinels in `common.sh` (`docs/HEADLESS_WAYLAND_TESTING.local.md:8
 - **sway reports no dock rect** (above). Geometry there is derived and pixel-measured.
 - Pointer support is enabled only after the input-delivery probe succeeds. Unsupported
   native visibility services remain unsupported even when pointer input works.
-- GNOME currently exercises the compatibility fallback without its shell extension.
+- GNOME has separate fallback and native bridge lanes. Native tests use one output
+  and hide the Shell panel; reservation, workspace switching and previews need
+  dedicated scenarios.
 - Popup edge containment, drag-and-drop, applet rendering and fractional scaling
   still need dedicated scenarios.
 - `WLR_RENDERER=pixman` is software rendering: correctness-representative, not

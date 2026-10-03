@@ -3,6 +3,33 @@ capture_phase() { capture_until_stable "$EVIDENCE_DIR/$name.$1.png"; }
 
 run_lab_action() {
     local action="$1" edge="$2" geometry x y width height ax ay anchor
+    if [ "$action" = window ]; then
+        # Exercise native toplevel events independently of dodge support.
+        record_window_items before || return 1
+        local lifecycle_ok=true
+        /usr/bin/python3 "$LAB_SCRIPTS/probes/client_probe.py" overlap /tmp/unused \
+            >"$LAB_DIR/$name.window.log" 2>&1 &
+        ADAPTER_PROBE_PID=$!
+        wait_window_item true || lifecycle_ok=false
+        record_window_items opened || lifecycle_ok=false
+        local tracked=false
+        for _ in $(seq 40); do
+            gdbus call --session --dest org.docking.Docking --object-path /org/docking/Docking \
+                --method org.docking.Docking.Items1.ListTransientIds \
+                >"$EVIDENCE_DIR/$name.opened.items.txt"
+            if grep -Fq "'lab-probe.desktop'" "$EVIDENCE_DIR/$name.opened.items.txt"; then
+                tracked=true
+                break
+            fi
+            sleep 0.25
+        done
+        terminate_pid "$ADAPTER_PROBE_PID"
+        ADAPTER_PROBE_PID=""
+        wait_window_item false || lifecycle_ok=false
+        record_window_items closed || lifecycle_ok=false
+        [ "$tracked" = true ] && [ "$lifecycle_ok" = true ]
+        return
+    fi
     geometry="$(adapter_geometry | jq '.outputs[0]')"
     x="$(echo "$geometry" | jq '.x')"; y="$(echo "$geometry" | jq '.y')"
     width="$(echo "$geometry" | jq '.width')"; height="$(echo "$geometry" | jq '.height')"
@@ -71,4 +98,20 @@ run_lab_action() {
         sleep 1.5
         capture_phase effect
     fi
+}
+
+record_window_items() {
+    adapter_windows >"$EVIDENCE_DIR/$name.$1.windows.json"
+}
+
+wait_window_item() {
+    local expected="$1" result present
+    for _ in $(seq 40); do
+        result="$(adapter_windows)" || return 1
+        present="$(echo "$result" | jq 'any(.[]; .title == "Lab probe")')"
+        if [ "$present" = "$expected" ]; then return 0; fi
+        sleep 0.25
+    done
+    log_adapter "test window tracking did not become $expected: $result"
+    return 1
 }

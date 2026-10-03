@@ -13,6 +13,47 @@ from PIL import Image, ImageDraw
 from tools.visual_compositor import compare, scenarios
 
 
+@pytest.mark.parametrize(
+    ("states", "tracked", "expected"),
+    [
+        ([False, True, False], True, True),
+        ([False, True, False], False, False),
+        ([False, False, False], True, False),
+        ([False, True, True], True, False),
+        ([True, True, False], True, False),
+    ],
+)
+def test_native_window_lifecycle_requires_compositor_and_app_evidence(
+    tmp_path, states, tracked, expected
+):
+    from tools.visual_compositor.behaviour import check_action
+
+    case = scenarios.WINDOW_CASES[0]
+    for phase, present in zip(("before", "opened", "closed"), states, strict=True):
+        windows = [{"title": "Lab probe"}] if present else []
+        (tmp_path / f"{case.name}.{phase}.windows.json").write_text(json.dumps(windows))
+    (tmp_path / f"{case.name}.opened.items.txt").write_text(
+        "(['lab-probe.desktop'],)" if tracked else "(@as [],)"
+    )
+    assert check_action(evidence=tmp_path, case=case, band={})[0] is expected
+
+
+@pytest.mark.parametrize("corrupt", ["missing", "[]", "(3,)", "not a variant"])
+def test_native_window_lifecycle_rejects_missing_or_invalid_evidence(tmp_path, corrupt):
+    from tools.visual_compositor.behaviour import check_action
+
+    case = scenarios.WINDOW_CASES[0]
+    for phase, windows in (
+        ("before", []),
+        ("opened", [{"title": "Lab probe"}]),
+        ("closed", []),
+    ):
+        (tmp_path / f"{case.name}.{phase}.windows.json").write_text(json.dumps(windows))
+    if corrupt != "missing":
+        (tmp_path / f"{case.name}.opened.items.txt").write_text(corrupt)
+    assert not check_action(evidence=tmp_path, case=case, band={})[0]
+
+
 @pytest.fixture
 def evidence(tmp_path, monkeypatch):
     case = scenarios.PLACEMENT_CASES[0]
