@@ -68,6 +68,8 @@ adapter_capabilities() {
   "expected_backend": "cosmic",
   "native_geometry": false,
   "window_tracking": $window_tracking,
+  "window_actions": $window_tracking,
+  "workspace_switch": $window_tracking,
   "cosmic_overlap_supported": $(echo "$probe" | jq '.cosmic_overlap_supported // false'),
   "pointer": false,
   "placement": $(if [ "$(echo "$probe" | jq -r '.layer_shell_supported')" = true ]; then echo true; else echo false; fi),
@@ -81,6 +83,7 @@ JSON
 
 adapter_prepare() {
     export XDG_CURRENT_DESKTOP=COSMIC
+    export LAB_NATIVE_OBSERVER=cosmic
     export XDG_SESSION_TYPE=wayland
     export GDK_BACKEND=wayland
 

@@ -33,6 +33,14 @@ def check_action(*, evidence: Path, case, band: dict) -> tuple[bool, str]:
         return path
 
     try:
+        if case.action and case.action.startswith("popup-"):
+            from tools.visual_compositor.popup_assertions import check_popup
+
+            return check_popup(evidence, case)
+        if case.action in {"window-actions", "workspace-switch", "bridge-recovery"}:
+            from tools.visual_compositor.backend_assertions import check_events
+
+            return check_events(evidence, case)
         if case.action == "window":
             import ast
 
@@ -123,5 +131,5 @@ def check_action(*, evidence: Path, case, band: dict) -> tuple[bool, str]:
             )
         minimum = 500 if case.action == "menu" else 80
         return changed >= minimum, f"{case.action}: {changed} pixels changed"
-    except (OSError, ValueError, SyntaxError, TypeError, IndexError) as exc:
+    except (OSError, ValueError, SyntaxError, TypeError, IndexError, KeyError) as exc:
         return False, f"interactive evidence: {exc}"

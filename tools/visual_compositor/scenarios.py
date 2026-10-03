@@ -67,6 +67,7 @@ class Case:
     action: str | None = None
     display_scene: str | None = None
     display_change: str | None = None
+    popup_target: str = "first"
 
 
 # A fixed, static pinned set. Docking's own first-run default is applets --
@@ -254,6 +255,71 @@ WINDOW_CASES = [
         requires="window_tracking",
         action="window",
     ),
+    Case(
+        "window-actions",
+        "windows",
+        BASE_CONFIG,
+        requires="window_actions",
+        action="window-actions",
+    ),
+    Case(
+        "workspace-switch",
+        "windows",
+        BASE_CONFIG,
+        requires="workspace_switch",
+        action="workspace-switch",
+    ),
+]
+RECOVERY_CASES = [
+    Case(
+        "gnome-bridge-recovery",
+        "recovery",
+        BASE_CONFIG,
+        edge="left",
+        requires="bridge_recovery",
+        action="bridge-recovery",
+    ),
+]
+POPUP_CASES = [
+    Case(
+        f"popup-{kind}-{edge}",
+        "popups",
+        {**BASE_CONFIG, "position": edge, "previews_enabled": kind == "preview"},
+        edge,
+        requires="preview_popup" if kind == "preview" else "popup_bounds",
+        action=f"popup-{kind}",
+    )
+    for edge in ("bottom", "top", "left", "right")
+    for kind in ("tooltip", "menu", "preview")
+] + [
+    Case(
+        f"popup-{kind}-many-{target}",
+        "popups",
+        {**BASE_CONFIG, "pinned": [f"lab-item-{i:02}.desktop" for i in range(32)]},
+        requires="narrow_popup",
+        action=f"popup-{kind}",
+        display_scene="narrow",
+        popup_target=target,
+    )
+    for kind in ("tooltip", "menu")
+    for target in ("first", "last")
+]
+SCALING_CASES = [
+    Case(
+        "scale-fractional",
+        "scaling",
+        BASE_CONFIG,
+        requires="scaling",
+        display_scene="fractional",
+    ),
+    Case(
+        "scale-mixed-dpi",
+        "scaling",
+        {**BASE_CONFIG, "monitor_index": 1},
+        output_index=1,
+        requires="scaling",
+        display_scene="mixed-dpi",
+    ),
 ]
 LAYOUT_CASES = [
     Case(
@@ -369,6 +435,9 @@ ALL_CASES = (
     + LAYOUT_CASES
     + DISPLAY_CASES
     + WINDOW_CASES
+    + RECOVERY_CASES
+    + POPUP_CASES
+    + SCALING_CASES
 )
 
 BEHAVIORS = {
@@ -380,6 +449,9 @@ BEHAVIORS = {
     "layouts": LAYOUT_CASES,
     "displays": DISPLAY_CASES,
     "windows": WINDOW_CASES,
+    "recovery": RECOVERY_CASES,
+    "popups": POPUP_CASES,
+    "scaling": SCALING_CASES,
 }
 
 
@@ -443,6 +515,7 @@ def emit_cases(path: Path, cases: list[Case]) -> None:
             "requires": case.requires,
             "display_scene": case.display_scene,
             "display_change": case.display_change,
+            "popup_target": case.popup_target,
         }
         for case in cases
     ]

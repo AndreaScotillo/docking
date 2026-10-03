@@ -31,8 +31,8 @@ The detailed matrix and numbered findings below retain the original 2026-10-02
 investigation. This section supersedes its older statements about unverified
 adapters, unavailable pointer input and missing display-change scenarios.
 
-The matrix now defines **33 cases** across placement, monitors, reservation,
-visibility, interaction, native window lifecycle, constrained layouts and live output changes. Capabilities
+The matrix now defines **54 cases** across placement, monitors, reservation,
+visibility, interaction, native window actions, bridge recovery, popup containment, fractional scaling, constrained layouts and live output changes. Capabilities
 are per adapter: this is not a claim that every case runs on every desktop.
 
 | Compositor | Verified route and scope | Current limitations |
@@ -41,12 +41,12 @@ are per adapter: this is not a claim that every case runs on every desktop.
 | Cinnamon | Nested Wayland in private Xvfb; native frame and all six reservation cases | Older Muffin shell bridge; no native dodge service |
 | Niri | Nested in headless Sway; five non-panel placement cases | Requires the vertical-edge startup fix in [#353](https://github.com/edumucelli/docking/pull/353); one nested output |
 | labwc | Headless wlroots; placement | No native dock-frame query |
-| COSMIC | Winit nested in headless Sway; five placement cases and native window open/close | Overlap notification is probed at runtime; absent protocol makes dodge unsupported |
-| KWin | Nested Wayland in headless Sway, QPainter; five placement cases | Reduced visibility service; no native dodge |
+| COSMIC | Winit nested in headless Sway; five placement cases, native open/close, minimize/restore/focus and workspace switching | Overlap notification is probed at runtime; absent protocol makes dodge unsupported |
+| KWin | Native Wayland in private Xvfb, QPainter; five placement cases and native 125% / mixed 125%/100% scaling | Reduced visibility service; no native dodge |
 | Wayfire | Arch Wayfire 0.11, headless Pixman and IPC; five placement cases and active-window dodge | Debian's older 0.9 build needs a render device; the default lane uses Arch |
 | Cage | Real headless kiosk compositor; startup, reduced backend and shutdown | Placement intentionally unsupported |
 | GNOME/Mutter (`gnome`) | GNOME Shell nested Wayland in private Xvfb; startup, reduced backend and shutdown | Shell extension deliberately absent; compatibility fallback |
-| GNOME bridge (`gnome-bridge`) | Same private Shell with the shipped bridge; native Mutter frames, four-edge placement, 40px gap and window open/close | Single output; Shell panel hidden for a deterministic canvas; no native dodge or reservation coverage |
+| GNOME bridge (`gnome-bridge`) | Same private Shell with the shipped bridge; native Mutter frames, four-edge placement, 40px gap, window actions, workspace switching, bridge recovery, all-edge popups and native 125% / mixed-DPI scaling | One or two native outputs; Shell panel hidden for a deterministic canvas; no native dodge or reservation coverage |
 
 ### Run the additional cases
 
@@ -92,7 +92,10 @@ settling and shutdown checks.
 master pushes. Weekly and manually dispatched runs add labwc, COSMIC, KWin,
 Wayfire, Cage, GNOME fallback and native GNOME bridge. Sway also runs the 16 new autohide, interaction, layout
 and output-change cases; Wayfire additionally checks native active-window dodge.
-The COSMIC and GNOME bridge lanes additionally check native window open/close.
+The COSMIC and GNOME bridge lanes check native window actions and workspace switching.
+Sway checks four-edge tooltips/menus and first/last launchers on a crowded 360-pixel output.
+GNOME checks all four popup edges on a 360×300 output and bridge recovery.
+GNOME and KWin check native 125% and mixed 125%/100% configurations on two outputs.
 Placement lanes require supported assertions; Cage and
 GNOME are explicit negative compatibility lanes. Failures retain screenshots,
 intermediate phases, geometry, input proof and logs for 14 days.
@@ -143,12 +146,75 @@ This case reproduces the COSMIC callback errors observed in the original dodge
 experiment. [#357](https://github.com/edumucelli/docking/pull/357) fixes missing
 output/workspace interface metadata in the toplevel bindings: PyWayland was
 dropping untyped object arguments. The real COSMIC lifecycle fails with the old
-bindings and passes with that fix. Merge #357 before enabling the COSMIC lifecycle
-lane. Absent overlap notification still makes native dodge unsupported.
+bindings and passes with that fix. The fix is on master. Absent overlap notification still makes native dodge unsupported.
 
 Six native GNOME baselines have their own `gnome-bridge` directory and image
 provenance. Regenerate and verify them against the same image, as for other
 compositors. The plain `gnome` lane remains a negative compatibility test.
+
+### Popup containment, native actions, recovery and scaling
+
+```sh
+# All supported Sway tooltips and menus, including the 32-icon / 360px cases.
+bash tools/visual_compositor_matrix.sh --compositor sway --behavior popups --geometry-only
+# GNOME preview, menu and tooltip cases; crowded Sway-only cases report UNSUP.
+bash tools/visual_compositor_matrix.sh --compositor gnome-bridge --behavior popups --geometry-only
+bash tools/visual_compositor_matrix.sh --compositor gnome-bridge --behavior recovery --geometry-only --require-supported
+# Native monitor changes, not resized screenshots pretending to be scaling.
+LAB_OUTPUTS=2 bash tools/visual_compositor_matrix.sh --compositor gnome-bridge --behavior scaling --geometry-only --require-supported
+LAB_OUTPUTS=2 bash tools/visual_compositor_matrix.sh --compositor kwin --behavior scaling --geometry-only --require-supported
+```
+
+Popup cases use a blue background and capture the complete mapped GTK popup as an
+RGBA template. The host locates that full allocation in the real compositor pixels,
+checks opaque content agreement, and requires newly appeared pixels relative to a
+resting capture. Docking's requested popup coordinates are never the oracle. The
+small-output GNOME CI lane selects the twelve four-edge cases explicitly; only Sway
+advertises the separate capability to change an output to the crowded 360px scene.
+
+The private `app_probe.py` wraps app construction to retain references to the actual
+backend and UI, and exposes a private 0600 UNIX socket. It calls the real services;
+no production test API is added. `window-actions` opens a real GTK window, minimizes
+it, activates/restores it with focus, and closes it. `workspace-switch` moves away
+and returns. Both record `.events.json` with Docking observations and a separate
+native GNOME/COSMIC protocol connection. Missing native confirmation fails.
+
+`gnome-bridge-recovery` verifies the bridge bus name disappears and returns while
+Docking's PID stays unchanged. While unavailable, it requests a left-edge placement
+and waits longer than the initial retry budget. After re-enabling, the independent
+Mutter frame must recover at the edge, then a new window must be tracked and closed.
+This reproduced a stale bottom-edge offset; the surface service now retries its
+latest placement when the bridge bus owner returns and disconnects on shutdown.
+The crowded tooltip cases also reproduced left/right clipping; tooltips now clamp
+to the icon's monitor workarea before converting to parent-relative coordinates.
+
+GNOME applies temporary native Mutter monitor configurations and captures each
+output through Shell's screenshot service. KWin reads and applies native KDE
+output-device/output-management protocols, while its Wayland compositor runs on
+private Xvfb with QPainter. Only its outer output windows use X11; Docking uses
+Wayland, verified by the GTK display probe and backend selection.
+
+Both routes assemble logical-coordinate canvases from real per-output pixels and
+retain native floating-point scales. The host rejects default scales and missing
+mixed-DPI outputs. KWin retains measured bounds and native output facts in
+`.capture.json`, plus the unnormalized `.parent.png`. Four uniquely coloured markers
+identify each rendered output in the private parent capture; the full native GTK
+allocation must match the independent output geometry. Its background ignores
+reservations, so it cannot accidentally calibrate a workarea as a whole output.
+Known calibration colours are removed from corner pixels before geometry/pixel
+assertions, while the raw image stays available. Markers alone cannot establish a
+dock. Its frame clock keeps otherwise empty outputs repainting.
+
+The Wayland-in-Sway QPainter route showed partial/blank fractional buffers during
+these tests. The Xvfb route renders native Wayland clients correctly at 125% and
+mixed 125%/100%, without a physical GPU. Private large parent output windows are
+arranged side by side before testing; marker identities, not that ordering, match
+their pixels to native outputs. No host display or existing desktop is accessed.
+
+The KDE XML fixtures preserve the version-1 management and version-2 device wire
+signatures from the upstream KDE protocols, with descriptions and later versions
+removed. PyWayland generates bindings only inside the disposable run directory.
+The KWin image adds Xvfb and xauth; no production protocol bindings are added.
 
 ## Why: what the existing lanes could not see
 
@@ -1357,11 +1423,13 @@ empty-string sentinels in `common.sh` (`docs/HEADLESS_WAYLAND_TESTING.local.md:8
 - **sway reports no dock rect** (above). Geometry there is derived and pixel-measured.
 - Pointer support is enabled only after the input-delivery probe succeeds. Unsupported
   native visibility services remain unsupported even when pointer input works.
-- GNOME has separate fallback and native bridge lanes. Native tests use one output
-  and hide the Shell panel; reservation, workspace switching and previews need
-  dedicated scenarios.
-- Popup edge containment, drag-and-drop, applet rendering and fractional scaling
-  still need dedicated scenarios.
+- GNOME has separate fallback and native bridge lanes. The native lane uses real
+  Mutter outputs and hides the Shell panel; native dodge and reservation are not covered.
+- Native action tests call Docking's window/workspace services as stimuli, rather than
+  clicking menu items. They verify independent compositor state and unchanged process IDs.
+- Fractional tests cover 125% and mixed 125%/100% at fixed modes. They do not establish
+  coverage of physical GPUs, hotplug under fractional scaling, or every fractional factor.
+- Drag-and-drop and applet rendering still need dedicated compositor scenarios.
 - `WLR_RENDERER=pixman` is software rendering: correctness-representative, not
   performance-representative.
 - Baselines are scoped to the compositor **and** to the container image. A compositor, font or

@@ -4,7 +4,11 @@ import sys
 
 from gi.repository import Gio, GLib
 
-method = "ListWindows" if sys.argv[1] == "windows" else "GetGeometry"
+method = {
+    "windows": "ListWindows",
+    "workspaces": "ListWorkspaces",
+    "geometry": "GetGeometry",
+}[sys.argv[1]]
 result = Gio.bus_get_sync(Gio.BusType.SESSION, None).call_sync(
     "org.docking.VisualLab.Gnome",
     "/org/docking/VisualLab/Gnome",

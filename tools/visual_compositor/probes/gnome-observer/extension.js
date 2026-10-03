@@ -1,10 +1,15 @@
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const XML = `<node><interface name="org.docking.VisualLab.Gnome1">
   <method name="GetGeometry"><arg type="s" direction="out"/></method>
   <method name="ListWindows"><arg type="s" direction="out"/></method>
+  <method name="ListWorkspaces"><arg type="s" direction="out"/></method>
+  <method name="CaptureOutput"><arg type="u" direction="in"/><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
+  <method name="SetBackground"><arg type="s" direction="in"/></method>
 </interface></node>`;
 
 export default class VisualObserver extends Extension {
@@ -20,6 +25,12 @@ export default class VisualObserver extends Extension {
         background.set_string('picture-options', 'none');
         Main.overview.hide();
         Main.panel.hide();
+        new Gio.Settings({schema_id: 'org.gnome.mutter'})
+            .set_strv('experimental-features', ['scale-monitor-framebuffer']);
+        new Gio.Settings({schema_id: 'org.gnome.mutter'})
+            .set_boolean('dynamic-workspaces', false);
+        new Gio.Settings({schema_id: 'org.gnome.desktop.wm.preferences'})
+            .set_int('num-workspaces', 2);
         this._dbus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._dbus.export(Gio.DBus.session, '/org/docking/VisualLab/Gnome');
         this._owner = Gio.bus_own_name_on_connection(Gio.DBus.session,
@@ -40,7 +51,34 @@ export default class VisualObserver extends Extension {
     ListWindows() {
         return JSON.stringify(this._windows().map(window => ({
             title: window.get_title(), app_id: window.get_wm_class(),
+            active: window === global.display.focus_window,
+            minimized: window.minimized,
+            workspace: window.get_workspace()?.index(),
         })));
+    }
+
+    ListWorkspaces() {
+        return JSON.stringify(Array.from({length: global.workspace_manager.n_workspaces}, (_, index) => ({
+            id: String(index), name: String(index + 1),
+            active: index === global.workspace_manager.get_active_workspace_index(),
+        })));
+    }
+
+    SetBackground(color) {
+        new Gio.Settings({schema_id: 'org.gnome.desktop.background'}).set_string('primary-color', color);
+    }
+
+    async CaptureOutputAsync([index, path], invocation) {
+        try {
+            const rect = global.display.get_monitor_geometry(index);
+            const stream = Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+            await new Shell.Screenshot().screenshot_area(rect.x, rect.y, rect.width, rect.height, stream);
+            stream.close(null);
+            invocation.return_value(new GLib.Variant('(b)', [true]));
+        } catch (error) {
+            console.error(error);
+            invocation.return_value(new GLib.Variant('(b)', [false]));
+        }
     }
 
     GetGeometry() {

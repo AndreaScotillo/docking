@@ -198,7 +198,7 @@ RUN cinnamon --help 2>&1 | grep -q -- '--nested' \
 # ---------------------------------------------------------------------------
 FROM sway AS kwin
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        kwin-wayland at-spi2-core \
+        kwin-wayland at-spi2-core xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 # Only assert what is verifiable here. An earlier version of this target
 # asserted `kwin_wayland --help | grep -q -- --virtual`, which fails for two
