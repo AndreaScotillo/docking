@@ -22,11 +22,9 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as pkg_version
 from typing import TYPE_CHECKING, Literal
 
-from docking import __version__ as docking_version
+from docking import __version__
 from docking.platform.backends.base import DisplayServer, PlatformCapabilities
 from docking.platform.environment import (
     backend_name,
@@ -206,7 +204,7 @@ def collect_diagnostics(
     )
     return DiagnosticsSnapshot(
         generated_at=datetime.now(tz=timezone.utc),
-        docking_version=_project_version(),
+        docking_version=__version__,
         python_version=sys.version.split()[0],
         gtk_version=_gtk_version(),
         os_name=_os_name(),
@@ -591,15 +589,6 @@ def _redact_env_value(key: str, value: str) -> str:
     if key == "DBUS_SESSION_BUS_ADDRESS" and value:
         return "<set>"
     return value
-
-
-def _project_version() -> str:
-    if docking_version:
-        return docking_version
-    try:
-        return pkg_version("docking")
-    except PackageNotFoundError:
-        return "unknown"
 
 
 def _gtk_version() -> str:
