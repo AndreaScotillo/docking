@@ -259,7 +259,8 @@ grep -q 'height 40' "$SWAY_CONFIG"
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="adapter probe requires jq")
-def test_cosmic_probe_matches_the_production_backend(tmp_path):
+@pytest.mark.parametrize("window_tracking", [False, True])
+def test_cosmic_probe_matches_the_production_backend(tmp_path, window_tracking):
     from docking.platform.backends.wayland.cosmic_session import CosmicSessionBackend
 
     scripts = compare.REPO_ROOT / "tools" / "visual_compositor" / "adapters"
@@ -269,16 +270,18 @@ def test_cosmic_probe_matches_the_production_backend(tmp_path):
             "-c",
             """
 set -euo pipefail
-export LAB_DIR="$1"
+export LAB_DIR="$1" XDG_CONFIG_HOME="$1/config" LAB_WINDOW_PROBE="$3"
 source "$2/common.sh"
 source "$2/cosmic.sh"
 session_probe_json() { echo '{"layer_shell_supported":true,"gtk_display_is_wayland":true}'; }
+adapter_windows() { "$LAB_WINDOW_PROBE"; }
 adapter_prepare
 adapter_capabilities
 """,
             "review",
             str(tmp_path),
             str(scripts),
+            "true" if window_tracking else "false",
         ],
         capture_output=True,
         text=True,
@@ -287,6 +290,9 @@ adapter_capabilities
     caps = json.loads(completed.stdout)
     backend = CosmicSessionBackend.__new__(CosmicSessionBackend)
     assert caps["expected_backend"] == backend.name
+    assert caps["window_tracking"] is window_tracking
+    assert caps["window_actions"] is window_tracking
+    assert caps["workspace_switch"] is window_tracking
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="adapter probe requires jq")
