@@ -97,6 +97,11 @@ default_border none
 default_floating_border none
 SWAY
 
+    # Closing the input probe must not leave an animated window snapshot behind
+    # the dock. Headless nested render loops can retain a stable intermediate frame.
+    mkdir -p "$XDG_CONFIG_HOME/niri"
+    printf 'animations { off; }\n' >"$XDG_CONFIG_HOME/niri/config.kdl"
+
     # DISPLAY is unset so nothing in this lane can quietly fall back to X11;
     # niri is given WAYLAND_DISPLAY explicitly instead.
     unset DISPLAY WAYLAND_DISPLAY
@@ -133,6 +138,7 @@ adapter_start() {
         log_adapter "parent sway never published a Wayland socket"
         return 1
     fi
+    export LAB_PARENT_DISPLAY="$parent_display"
     log_adapter "parent sway up on $parent_display"
 
     # Give sway a moment to finish configuring its output before a client sizes
@@ -257,10 +263,7 @@ print(json.dumps({"outputs": outputs, "dock_rect": None}))
 PY
 }
 
-adapter_pointer() {
-    log_adapter "pointer injection is not implemented for niri"
-    return 1
-}
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     # The nested compositor first: it is a client of the parent, so the parent

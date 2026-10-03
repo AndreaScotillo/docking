@@ -54,7 +54,7 @@ session_probe_json() {
         echo '{"gtk_display_is_wayland": false, "layer_shell_supported": false}'
         return 0
     fi
-    /usr/bin/python3 "$probe" capabilities 2>/dev/null \
+    PYTHONPATH="$(docking_source_pythonpath)" /usr/bin/python3 "$probe" capabilities 2>/dev/null \
         || echo '{"gtk_display_is_wayland": false, "layer_shell_supported": false}'
 }
 
@@ -105,6 +105,11 @@ terminate_pid() {
 adapter_cleanup() {
     local status=$?
     trap - EXIT
+    if [ -n "${ADAPTER_FRAME_PID:-}" ]; then terminate_pid "$ADAPTER_FRAME_PID"; ADAPTER_FRAME_PID=""; fi
+    if [ -n "${ADAPTER_INPUT_PID:-}" ]; then
+        terminate_pid "$ADAPTER_INPUT_PID"
+        ADAPTER_INPUT_PID=""
+    fi
     if [ -n "$ADAPTER_PROBE_PID" ]; then
         terminate_pid "$ADAPTER_PROBE_PID"
         ADAPTER_PROBE_PID=""

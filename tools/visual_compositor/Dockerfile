@@ -30,7 +30,13 @@
 # /usr/lib/docking/vendor-python<minor> layout the real launcher uses, so source
 # mode resolves imports the way the packaged build does.
 # ---------------------------------------------------------------------------
-FROM debian:trixie AS pywayland-builder
+ARG DEBIAN_IMAGE=debian:trixie@sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c
+ARG DEBIAN_SNAPSHOT=20261002T000000Z
+FROM ${DEBIAN_IMAGE} AS pywayland-builder
+ARG DEBIAN_SNAPSHOT
+RUN sed -i -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|g" \
+    -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|g" /etc/apt/sources.list.d/debian.sources \
+    && printf 'Acquire::Check-Valid-Until "false";\n' >/etc/apt/apt.conf.d/99snapshot
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -49,7 +55,7 @@ RUN python3 -m pip install --upgrade --ignore-installed \
     && python3 -m pip install --no-compile --no-binary=pywayland \
         --break-system-packages \
         --target="/vendors/vendor-python$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
-        "pywayland>=0.4.18,<0.5" \
+        "pywayland==0.4.19" \
     && rm -rf /vendors/vendor-python*/bin
 
 # The same import contract build-wayland-vendors.sh:19-20 enforces.
@@ -61,7 +67,11 @@ RUN PYTHONPATH="$(ls -d /vendors/vendor-python*)" python3 -c \
 # Stage: shared base. The GTK/GI stack Docking needs, capture tooling, and the
 # session plumbing. No compositor here.
 # ---------------------------------------------------------------------------
-FROM debian:trixie AS base
+FROM ${DEBIAN_IMAGE} AS base
+ARG DEBIAN_SNAPSHOT
+RUN sed -i -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/|g" \
+    -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/|g" /etc/apt/sources.list.d/debian.sources \
+    && printf 'Acquire::Check-Valid-Until "false";\n' >/etc/apt/apt.conf.d/99snapshot
 
 ENV DEBIAN_FRONTEND=noninteractive
 # Mesa software rendering: correctness-representative, not performance-representative.
@@ -186,9 +196,9 @@ RUN cinnamon --help 2>&1 | grep -q -- '--nested' \
 # ---------------------------------------------------------------------------
 # Target: kwin -- the virtual backend. No X, no GPU.
 # ---------------------------------------------------------------------------
-FROM base AS kwin
+FROM sway AS kwin
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        kwin-wayland \
+        kwin-wayland at-spi2-core \
     && rm -rf /var/lib/apt/lists/*
 # Only assert what is verifiable here. An earlier version of this target
 # asserted `kwin_wayland --help | grep -q -- --virtual`, which fails for two
@@ -200,7 +210,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # So: assert the files exist, and let the adapter determine viability by
 # actually starting it and reporting the compositor's own error. That is a real
 # answer rather than a proxy, and it is the same pattern used for niri/cosmic.
-RUN test -x /usr/bin/kwin_wayland && test -x /usr/bin/kwin_wayland_wrapper
+RUN setcap -r /usr/bin/kwin_wayland; test -x /usr/bin/kwin_wayland && test -x /usr/bin/kwin_wayland_wrapper
 
 
 # ---------------------------------------------------------------------------
@@ -217,8 +227,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         muffin \
         xvfb \
         xauth \
-        kwin-wayland \
+        kwin-wayland at-spi2-core \
     && rm -rf /var/lib/apt/lists/*
 RUN for tool in sway labwc wayfire cage cinnamon muffin kwin_wayland Xvfb; do \
         command -v "$tool" >/dev/null 2>&1 || { echo "missing $tool" >&2; exit 1; }; \
     done
+
+# GNOME/Mutter without the Docking bridge: negative compatibility lane.
+FROM cinnamon AS gnome
+RUN apt-get update && apt-get install -y --no-install-recommends gnome-shell \
+    && rm -rf /var/lib/apt/lists/*
+RUN command -v gnome-shell

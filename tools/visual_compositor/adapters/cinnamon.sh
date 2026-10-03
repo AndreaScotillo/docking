@@ -59,7 +59,9 @@ adapter_start() {
     # xvfb-run allocates a free display and tears its X server down with the
     # child, so the display number is never hard-coded.
     xvfb-run -a -s "-screen 0 ${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720}x24 +extension GLX +render -noreset" \
-        cinnamon --nested --wayland \
+        bash -c 'printf "%s\n" "$DISPLAY" >"$LAB_DIR/outer-display";
+                 printf "%s\n" "$XAUTHORITY" >"$LAB_DIR/outer-authority";
+                 exec cinnamon --nested --wayland' \
         >"${LAB_DIR}/cinnamon.log" 2>&1 &
     ADAPTER_COMPOSITOR_PID=$!
 
@@ -98,14 +100,7 @@ adapter_geometry() {
     /usr/bin/python3 "$PROBE" geometry | jq '{outputs, dock_rect}'
 }
 
-adapter_pointer() {
-    # No pointer injection. Cinnamon is nested inside Xvfb, so an X11 pointer
-    # move on the *outer* display would only reach the nested session if the
-    # nested desktop maps 1:1 to the Xvfb screen, which is not guaranteed.
-    # Refusing is honest; a best-effort warp that silently does nothing is not.
-    log_adapter "pointer injection is not implemented for the nested Cinnamon lane"
-    return 1
-}
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     if [ -n "$ADAPTER_COMPOSITOR_PID" ]; then

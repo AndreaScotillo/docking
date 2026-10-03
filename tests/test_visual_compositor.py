@@ -41,7 +41,7 @@ def evidence(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(compare, "BASELINE_DIR", tmp_path / "baselines")
 
-    def evaluate(*, update=True):
+    def evaluate(*, update=True, geometry_only=False):
         (tmp_path / f"{case.name}.json").write_text(json.dumps(record))
         return compare.evaluate(
             evidence_dir=tmp_path,
@@ -51,6 +51,7 @@ def evidence(tmp_path, monkeypatch):
             compositor="cinnamon",
             capabilities=caps,
             run_meta=meta,
+            geometry_only=geometry_only,
         )[0]
 
     return SimpleNamespace(
@@ -271,3 +272,134 @@ adapter_capabilities
     )
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout)["native_geometry"] is False
+
+
+def test_geometry_mode_checks_assertions_without_recording_pixels(evidence):
+    result = evidence.evaluate(update=False, geometry_only=True)
+    assert result.status == "pass"
+    assert result.pending is None
+    assert "pixel baseline not compared" in result.detail
+    evidence.record["dock_rect"]["width"] = 5000
+    assert evidence.evaluate(geometry_only=True).status == "fail"
+
+
+@pytest.mark.parametrize("action", ["menu", "tooltip", "zoom"])
+def test_interaction_requires_a_visible_effect(tmp_path, action):
+    from tools.visual_compositor.behaviour import check_action
+
+    case = SimpleNamespace(name="interaction", action=action)
+    for phase in ("resting", "effect"):
+        Image.new("RGB", (1280, 720), "black").save(
+            tmp_path / f"interaction.{phase}.png"
+        )
+    ok, _ = check_action(
+        evidence=tmp_path,
+        case=case,
+        band={"x": 0, "y": 400, "width": 1280, "height": 320},
+    )
+    assert not ok
+
+
+def test_tooltip_cannot_masquerade_as_zoom(tmp_path):
+    from tools.visual_compositor.behaviour import check_action
+
+    before = Image.new("RGB", (1280, 720), "black")
+    ImageDraw.Draw(before).rectangle((400, 680, 879, 719), fill="white")
+    before.save(tmp_path / "zoom.resting.png")
+    after = before.copy()
+    ImageDraw.Draw(after).rectangle((550, 550, 700, 580), fill="white")
+    after.save(tmp_path / "zoom.effect.png")
+    ok, _ = check_action(
+        evidence=tmp_path,
+        case=SimpleNamespace(name="zoom", action="zoom"),
+        band={"x": 0, "y": 400, "width": 1280, "height": 320},
+    )
+    assert not ok
+
+
+@pytest.mark.parametrize("popup", [True, False])
+def test_tooltip_requires_popup_above_dock_not_cursor(tmp_path, popup):
+    from tools.visual_compositor.behaviour import check_action
+
+    before = Image.new("RGB", (1280, 720), "black")
+    ImageDraw.Draw(before).rectangle((400, 680, 879, 719), fill="white")
+    before.save(tmp_path / "tooltip.resting.png")
+    after = before.copy()
+    ImageDraw.Draw(after).rectangle((450, 685, 465, 705), fill="red")
+    if popup:
+        ImageDraw.Draw(after).rectangle((430, 630, 530, 650), fill="white")
+    after.save(tmp_path / "tooltip.effect.png")
+    ok, _ = check_action(
+        evidence=tmp_path,
+        case=SimpleNamespace(name="tooltip", action="tooltip"),
+        band={"x": 0, "y": 400, "width": 1280, "height": 320},
+    )
+    assert ok is popup
+
+
+@pytest.mark.parametrize("hidden", [True, False])
+def test_autohide_requires_both_hide_transitions(tmp_path, hidden):
+    from tools.visual_compositor.behaviour import check_action
+
+    visible = Image.new("RGB", (1280, 720), "black")
+    ImageDraw.Draw(visible).rectangle((400, 680, 879, 719), fill="white")
+    visible.save(tmp_path / "hide.revealed.png")
+    blank = Image.new("RGB", (1280, 720), "black")
+    blank.save(tmp_path / "hide.hidden.png")
+    (blank if hidden else visible).save(tmp_path / "hide.hidden-again.png")
+    ok, _ = check_action(
+        evidence=tmp_path,
+        case=SimpleNamespace(name="hide", action="autohide"),
+        band={"x": 0, "y": 400, "width": 1280, "height": 320},
+    )
+    assert ok is hidden
+
+
+@pytest.mark.parametrize("on_removed", [True, False, "cursor"])
+def test_output_removal_requires_dock_on_that_output(tmp_path, on_removed):
+    case = SimpleNamespace(name="remove", display_change="remove", edge="bottom", gap=0)
+    first = {"name": "HEADLESS-1", "x": 0, "y": 0, "width": 1280, "height": 720}
+    second = {**first, "name": "HEADLESS-2", "x": 1280}
+    (tmp_path / "remove.before-change.json").write_text(
+        json.dumps({"outputs": [first, second]})
+    )
+    image = Image.new("RGB", (2560, 720), "black")
+    offset = 1280 if on_removed else 0
+    if on_removed == "cursor":
+        ImageDraw.Draw(image).rectangle((1700, 685, 1710, 700), fill="white")
+    else:
+        ImageDraw.Draw(image).rectangle(
+            (offset + 400, 680, offset + 879, 719), fill="white"
+        )
+    image.save(tmp_path / "remove.before-change.png")
+    error = compare.check_output_transition(
+        evidence=tmp_path, case=case, record={"outputs": [first]}
+    )
+    assert (error is None) is (on_removed is True)
+
+
+def test_scaled_screenshot_requires_logical_pixel_contract(evidence):
+    evidence.record["outputs"][0]["scale"] = 2
+    assert evidence.evaluate(geometry_only=True).status == "unsupported"
+    evidence.caps["logical_screenshot"] = True
+    assert evidence.evaluate(geometry_only=True).status == "pass"
+
+
+def test_negative_origin_transforms_self_report_into_canvas(evidence):
+    evidence.record["outputs"][0]["x"] = -1280
+    evidence.record["dock_rect"]["x"] = -1280
+    evidence.record["capture_origin"] = {"x": -1280, "y": 0}
+    evidence.record["self_reported_anchor"] = "(true, -640, 700, 'bottom')"
+    result = evidence.evaluate(geometry_only=True)
+    assert result.status == "pass"
+
+
+def test_container_receives_actions_and_output_changes(tmp_path):
+    cases = scenarios.select_cases(behavior=None, only=["output-removal", "hover-zoom"])
+    path = tmp_path / "cases.json"
+    scenarios.emit_cases(path, cases)
+    records = {item["name"]: item for item in json.loads(path.read_text())}
+    assert records["output-removal"]["display_change"] == "remove"
+    assert records["output-removal"]["display_scene"] == "dual"
+    assert records["hover-zoom"]["action"] == "zoom"
+    assert records["hover-zoom"]["requires"] == "interactive"

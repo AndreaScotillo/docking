@@ -64,6 +64,9 @@ class Case:
     maximize_window: bool = False
     # Exercise the shell-owned reservation's cleanup even without app teardown.
     crash_dock: bool = False
+    action: str | None = None
+    display_scene: str | None = None
+    display_change: str | None = None
 
 
 # A fixed, static pinned set. Docking's own first-run default is applets --
@@ -196,7 +199,124 @@ def _monitor_cases() -> list[Case]:
 
 PLACEMENT_CASES = _placement_cases()
 MONITOR_CASES = _monitor_cases()
-VISIBILITY_CASES: list[Case] = []  # Phase 3
+VISIBILITY_CASES = [
+    Case(
+        f"autohide-{edge}",
+        "visibility",
+        {
+            **BASE_CONFIG,
+            "position": edge,
+            "hide_mode": "autohide",
+            "tooltips_enabled": False,
+        },
+        edge,
+        requires="interactive",
+        action="autohide",
+    )
+    for edge in ("bottom", "top", "left", "right")
+] + [
+    Case(
+        "dodge-active",
+        "visibility",
+        {**BASE_CONFIG, "hide_mode": "dodge-active"},
+        requires="dodge",
+        action="dodge",
+    ),
+]
+INTERACTION_CASES = [
+    Case(
+        "hover-zoom",
+        "interaction",
+        {**BASE_CONFIG, "zoom_enabled": True},
+        requires="interactive",
+        action="zoom",
+    ),
+    Case(
+        "hover-tooltip",
+        "interaction",
+        BASE_CONFIG,
+        requires="interactive",
+        action="tooltip",
+    ),
+    Case(
+        "context-menu",
+        "interaction",
+        BASE_CONFIG,
+        requires="interactive",
+        action="menu",
+    ),
+]
+LAYOUT_CASES = [
+    Case(
+        "layout-narrow",
+        "layouts",
+        BASE_CONFIG,
+        requires="output_changes",
+        display_scene="narrow",
+    ),
+    Case(
+        "layout-many-icons",
+        "layouts",
+        {**BASE_CONFIG, "pinned": [f"lab-item-{i:02}.desktop" for i in range(32)]},
+        requires="output_changes",
+        display_scene="narrow",
+    ),
+    Case(
+        "layout-scale-2",
+        "layouts",
+        BASE_CONFIG,
+        requires="output_changes",
+        display_scene="scale2",
+    ),
+    Case(
+        "layout-mixed-scale",
+        "layouts",
+        {**BASE_CONFIG, "monitor_index": 0},
+        output_name="HEADLESS-1",
+        requires="output_changes",
+        display_scene="mixed",
+    ),
+    Case(
+        "layout-rotated",
+        "layouts",
+        BASE_CONFIG,
+        requires="output_changes",
+        display_scene="rotated",
+    ),
+    Case(
+        "layout-negative-origin",
+        "layouts",
+        {**BASE_CONFIG, "monitor_index": 1},
+        output_name="HEADLESS-2",
+        requires="output_changes",
+        display_scene="negative",
+    ),
+]
+DISPLAY_CASES = [
+    Case(
+        "output-resolution-change",
+        "displays",
+        BASE_CONFIG,
+        requires="output_changes",
+        display_change="resolution",
+    ),
+    Case(
+        "output-scale-change",
+        "displays",
+        BASE_CONFIG,
+        requires="output_changes",
+        display_change="scale",
+    ),
+    Case(
+        "output-removal",
+        "displays",
+        {**BASE_CONFIG, "monitor_index": 1},
+        output_name="HEADLESS-1",
+        requires="output_changes",
+        display_scene="dual",
+        display_change="remove",
+    ),
+]
 RESERVATION_CASES = [
     Case(
         f"reservation-{edge}",
@@ -231,13 +351,24 @@ RESERVATION_CASES.append(
         crash_dock=True,
     )
 )
-ALL_CASES = PLACEMENT_CASES + MONITOR_CASES + VISIBILITY_CASES + RESERVATION_CASES
+ALL_CASES = (
+    PLACEMENT_CASES
+    + MONITOR_CASES
+    + VISIBILITY_CASES
+    + RESERVATION_CASES
+    + INTERACTION_CASES
+    + LAYOUT_CASES
+    + DISPLAY_CASES
+)
 
 BEHAVIORS = {
     "placement": PLACEMENT_CASES,
     "monitors": MONITOR_CASES,
     "visibility": VISIBILITY_CASES,
     "reservation": RESERVATION_CASES,
+    "interaction": INTERACTION_CASES,
+    "layouts": LAYOUT_CASES,
+    "displays": DISPLAY_CASES,
 }
 
 
@@ -297,6 +428,10 @@ def emit_cases(path: Path, cases: list[Case]) -> None:
             "output_name": case.output_name,
             "maximize_window": case.maximize_window,
             "crash_dock": case.crash_dock,
+            "action": case.action,
+            "requires": case.requires,
+            "display_scene": case.display_scene,
+            "display_change": case.display_change,
         }
         for case in cases
     ]

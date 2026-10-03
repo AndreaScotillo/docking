@@ -82,10 +82,7 @@ adapter_geometry() {
           dock_rect: null}'
 }
 
-adapter_pointer() {
-    log_adapter "pointer injection is not implemented for labwc"
-    return 1
-}
+adapter_pointer() { [ "$LAB_INPUT_SUPPORTED" = true ] && lab_pointer "$@"; }
 
 adapter_stop() {
     if [ -n "$ADAPTER_COMPOSITOR_PID" ]; then
