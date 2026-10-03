@@ -156,7 +156,7 @@ run_case() {
     if [ -n "$requirement" ] && [ "$(jq -r --arg cap "$requirement" '.[$cap] // false' "$EVIDENCE_DIR/capabilities.json")" != true ]; then
         action_supported=false
     fi
-    if [ -n "$action" ] && [ "$LAB_INPUT_SUPPORTED" = true ] && [ "$action_supported" = true ]; then
+    if [ -n "$action" ] && { [ "$LAB_INPUT_SUPPORTED" = true ] || [ "$action" = window ]; } && [ "$action_supported" = true ]; then
         source "$HERE/actions.sh"
         run_lab_action "$action" "$(echo "$case_json" | jq -r '.edge')" || action_ok=false
     fi

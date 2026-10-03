@@ -56,6 +56,6 @@ start_lab_input() {
     terminate_pid "$ADAPTER_PROBE_PID"
     ADAPTER_PROBE_PID=""
     # Niri's top-left hot corner opens its overview and changes the whole scene.
-    if [ "$COMPOSITOR" = niri ]; then lab_pointer 100 100 || true
+    if [ "$COMPOSITOR" = niri ] || [[ "$COMPOSITOR" = gnome* ]]; then lab_pointer 100 100 || true
     else lab_pointer 0 0 || true; fi
 }

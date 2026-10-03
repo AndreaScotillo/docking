@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compositor: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["sway","cinnamon","niri","labwc","cosmic","kwin","wayfire","cage","gnome"]' || '["sway","cinnamon","niri"]') }}
+        compositor: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["sway","cinnamon","niri","labwc","cosmic","kwin","wayfire","cage","gnome","gnome-bridge"]' || '["sway","cinnamon","niri"]') }}
     steps:
       - uses: actions/checkout@v6
       - name: Install comparison dependencies
@@ -73,6 +73,11 @@ jobs:
           bash tools/visual_compositor_matrix.sh --compositor sway --behavior interaction --geometry-only --require-supported
           bash tools/visual_compositor_matrix.sh --compositor sway --behavior displays --geometry-only --require-supported
           bash tools/visual_compositor_matrix.sh --compositor sway --behavior layouts --geometry-only --require-supported
+      - name: Check native window tracking
+        if: matrix.compositor == 'gnome-bridge' || matrix.compositor == 'cosmic'
+        env:
+          DOCKING_LAB_IMAGE: docking-ci:${{ matrix.compositor }}
+        run: bash tools/visual_compositor_matrix.sh --compositor "${{ matrix.compositor }}" --behavior windows --geometry-only --require-supported
       - name: Check native Wayfire dodge
         if: matrix.compositor == 'wayfire'
         env:
