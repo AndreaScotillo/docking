@@ -8,6 +8,14 @@ adapter_prepare() {
     export MUTTER_DEBUG_DUMMY_MODE_SPECS="${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720}"
     export MUTTER_DEBUG_NUM_DUMMY_MONITORS=1
     unset DISPLAY
+    if [ "${LAB_GNOME_BRIDGE:-0}" = 1 ]; then
+        local extensions="$XDG_DATA_HOME/gnome-shell/extensions"
+        mkdir -p "$extensions"
+        cp -r "$DOCKING_SOURCE/docking/platform/backends/gnome/extension" \
+            "$extensions/docking-bridge@docking.org"
+        cp -r "$LAB_SCRIPTS/probes/gnome-observer" \
+            "$extensions/docking-visual-observer@docking.org"
+    fi
 }
 adapter_start() {
     xvfb-run -a -s "-screen 0 ${LAB_WIDTH:-1280}x${LAB_HEIGHT:-720}x24 +extension GLX +render -noreset" \
@@ -24,6 +32,9 @@ adapter_wait_ready() {
             --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner \
             org.gnome.Shell >/dev/null 2>&1; then
             sleep 2
+            if [ "${LAB_GNOME_BRIDGE:-0}" = 1 ]; then
+                enable_lab_gnome_bridge
+            fi
             return 0
         fi
         sleep 0.5
@@ -31,6 +42,13 @@ adapter_wait_ready() {
     return 1
 }
 adapter_capabilities() {
+    if [ "${LAB_GNOME_BRIDGE:-0}" = 1 ]; then
+        /usr/bin/python3 "$LAB_SCRIPTS/probes/gnome_probe.py" geometry >/dev/null
+        session_probe_json | jq '{compositor:"gnome-bridge", expected_backend:"gnome-shell-bridge",
+            placement:true, native_geometry:true, window_tracking:true, pointer:false,
+            gtk_display_is_wayland, screenshot_method:"private-xvfb"}'
+        return
+    fi
     session_probe_json | jq '{compositor:"gnome", expected_backend:"reduced",
         placement:false, native_geometry:false, pointer:false,
         unsupported_reasons:{placement:"GNOME requires the Docking Shell bridge, which this negative compatibility lane deliberately omits"},
@@ -41,6 +59,35 @@ adapter_screenshot() {
         /usr/bin/python3 "$LAB_SCRIPTS/probes/x11_capture.py" \
         "$(cat "$LAB_DIR/outer-display")" "$1"
 }
-adapter_geometry() { /usr/bin/python3 "$LAB_SCRIPTS/probes/session_probe.py" geometry; }
+adapter_geometry() {
+    if [ "${LAB_GNOME_BRIDGE:-0}" = 1 ]; then
+        /usr/bin/python3 "$LAB_SCRIPTS/probes/gnome_probe.py" geometry \
+            | jq -e 'if .overview_visible then error("GNOME overview contaminated the capture") else . end'
+    else
+        /usr/bin/python3 "$LAB_SCRIPTS/probes/session_probe.py" geometry
+    fi
+}
+adapter_windows() { /usr/bin/python3 "$LAB_SCRIPTS/probes/gnome_probe.py" windows; }
 adapter_pointer() { return 1; }
 adapter_stop() { adapter_cleanup; }
+
+enable_lab_gnome_bridge() {
+    local uuid result
+    for uuid in docking-bridge@docking.org docking-visual-observer@docking.org; do
+        result="$(gdbus call --session --dest org.gnome.Shell \
+            --object-path /org/gnome/Shell --method org.gnome.Shell.Extensions.EnableExtension "$uuid")"
+        [ "$result" = '(true,)' ] || { log_adapter "GNOME refused extension $uuid: $result"; return 1; }
+    done
+    for _ in $(seq 40); do
+        if gdbus call --session --dest org.docking.Docking.GnomeShellBridge \
+            --object-path /org/docking/Docking/GnomeShellBridge \
+            --method org.docking.Docking.GnomeShellBridge1.ListWorkspaces >/dev/null 2>&1 \
+            && /usr/bin/python3 "$LAB_SCRIPTS/probes/gnome_probe.py" geometry >/dev/null 2>&1; then
+            sleep 2
+            return 0
+        fi
+        sleep 0.25
+    done
+    log_adapter "GNOME bridge or independent frame observer did not become ready"
+    return 1
+}

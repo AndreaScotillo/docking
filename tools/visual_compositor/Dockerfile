@@ -238,3 +238,6 @@ FROM cinnamon AS gnome
 RUN apt-get update && apt-get install -y --no-install-recommends gnome-shell \
     && rm -rf /var/lib/apt/lists/*
 RUN command -v gnome-shell
+
+# Same pinned Shell image, with the bridge installed only into the run directory.
+FROM gnome AS gnome-bridge

@@ -246,6 +246,15 @@ INTERACTION_CASES = [
         action="menu",
     ),
 ]
+WINDOW_CASES = [
+    Case(
+        "window-open-close",
+        "windows",
+        BASE_CONFIG,
+        requires="window_tracking",
+        action="window",
+    ),
+]
 LAYOUT_CASES = [
     Case(
         "layout-narrow",
@@ -359,6 +368,7 @@ ALL_CASES = (
     + INTERACTION_CASES
     + LAYOUT_CASES
     + DISPLAY_CASES
+    + WINDOW_CASES
 )
 
 BEHAVIORS = {
@@ -369,6 +379,7 @@ BEHAVIORS = {
     "interaction": INTERACTION_CASES,
     "layouts": LAYOUT_CASES,
     "displays": DISPLAY_CASES,
+    "windows": WINDOW_CASES,
 }
 
 
