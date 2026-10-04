@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import gi
@@ -23,6 +24,12 @@ from docking.platform.backends.base import (
     WindowService,
     WindowSnapshot,
 )
+from docking.platform.backends.diagnostics import (
+    WindowDiagnostic,
+    WindowReason,
+    WindowTrackingDiagnostic,
+    with_match,
+)
 
 if TYPE_CHECKING:
     from docking.platform.applications.identity import ProcessIdentityService
@@ -41,6 +48,7 @@ class MuffinDebugClient:
 
     def __init__(self, *, proxy: Gio.DBusProxy) -> None:
         self._proxy = proxy
+        self.last_query_failed = False
 
     @classmethod
     def connect(cls) -> MuffinDebugClient | None:
@@ -67,6 +75,7 @@ class MuffinDebugClient:
         return cls(proxy=proxy)
 
     def list_windows(self) -> Sequence[Mapping[str, Any]]:
+        self.last_query_failed = False
         try:
             result = self._proxy.call_sync(
                 "ListWindows",
@@ -77,6 +86,7 @@ class MuffinDebugClient:
             )
             rows = result.unpack()[0]
         except Exception as exc:
+            self.last_query_failed = True
             log.warning("Muffin ListWindows failed: %s", exc)
             return ()
         return tuple(row for row in rows if isinstance(row, Mapping))
@@ -122,6 +132,11 @@ class MuffinWindowService(WindowService):
         client: MuffinDebugClient,
     ) -> None:
         self._model = model
+        self._application_registry = application_registry
+        self._tracking_diagnostic = WindowTrackingDiagnostic(
+            status="pending", detail="No window tracking scan has completed."
+        )
+        self._last_window_diagnostic = WindowDiagnostic()
         self._matcher = AppIdMatcher(
             registry=application_registry,
             process_identity_service=process_identity_service,
@@ -139,17 +154,40 @@ class MuffinWindowService(WindowService):
             GLib.source_remove(self._poll_source_id)
             self._poll_source_id = 0
         self._windows.clear()
+        self._tracking_diagnostic = WindowTrackingDiagnostic(
+            status="stopped", detail="Window tracking has stopped."
+        )
         self._model.update_running(running={})
 
     def refresh(self) -> None:
         self._matcher.sync_visible_items(self._model.visible_items())
         windows: dict[int, _MuffinWindow] = {}
+        records: list[WindowDiagnostic] = []
         for row in self._client.list_windows():
             window = self._window_from_row(row)
+            record = self._last_window_diagnostic
+            if window is not None and _bool(row, "skip-taskbar"):
+                record = replace(
+                    record, outcome="excluded", reason=WindowReason.SKIP_TASKBAR
+                )
+            records.append(record)
             if window is not None and not _bool(row, "skip-taskbar"):
                 windows[window.muffin_id] = window
         self._windows = windows
+        failed = self._client.last_query_failed
+        self._tracking_diagnostic = WindowTrackingDiagnostic(
+            status="failed" if failed else "available",
+            scanned_at=datetime.now(tz=timezone.utc),
+            registry_generation=self._application_registry.generation,
+            windows=tuple(records),
+            detail="Muffin window query failed."
+            if failed
+            else "Last window tracking scan.",
+        )
         self._publish_running()
+
+    def diagnostic_snapshot(self) -> WindowTrackingDiagnostic:
+        return self._tracking_diagnostic
 
     def list_all_windows(self) -> Sequence[WindowSnapshot]:
         return tuple(self._snapshot(window) for window in self._windows.values())
@@ -198,6 +236,9 @@ class MuffinWindowService(WindowService):
     def _window_from_row(self, row: Mapping[str, Any]) -> _MuffinWindow | None:
         muffin_id = _int(row, "id")
         if muffin_id is None:
+            self._last_window_diagnostic = WindowDiagnostic(
+                outcome="error", reason=WindowReason.INVALID_WINDOW_ID
+            )
             return None
         identities = tuple(
             dict.fromkeys(
@@ -217,10 +258,45 @@ class MuffinWindowService(WindowService):
         if pid is not None and pid <= 0:
             pid = None
         match = None
+        attempt = None
         for identity in identities:
-            match = self._matcher.match_result(identity, process_id=pid)
+            attempt = self._matcher.match_attempt(identity, process_id=pid)
+            match = attempt.match
             if match is not None:
                 break
+        if attempt is None:
+            attempt = self._matcher.match_attempt("", process_id=pid)
+        self._last_window_diagnostic = with_match(
+            WindowDiagnostic(
+                window_id=f"wayland:muffin:{muffin_id}",
+                identities=tuple(
+                    (key, value)
+                    for key in (
+                        "app-id",
+                        "gtk-application-id",
+                        "sandboxed-app-id",
+                        "wm-class",
+                        "wm-class-instance",
+                    )
+                    if (value := _text(row, key))
+                ),
+                pid=pid,
+                executable_path=(
+                    str(attempt.executable_path)
+                    if attempt and attempt.executable_path
+                    else None
+                ),
+                workspace=(
+                    str(workspace)
+                    if (workspace := _int(row, "workspace")) is not None
+                    else None
+                ),
+                reason=WindowReason.NO_MATCH
+                if identities
+                else WindowReason.NO_IDENTITY,
+            ),
+            match,
+        )
         return _MuffinWindow(
             muffin_id=muffin_id,
             title=_text(row, "title") or "Window",

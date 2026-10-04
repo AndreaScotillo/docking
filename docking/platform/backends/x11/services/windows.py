@@ -23,6 +23,7 @@ from docking.platform.backends.base import (
     WindowId,
     WindowService,
 )
+from docking.platform.backends.diagnostics import WindowTrackingDiagnostic
 from docking.platform.backends.x11.impl.window_tracker import WindowTracker
 
 if TYPE_CHECKING:
@@ -51,6 +52,9 @@ class X11WindowService(WindowTracker, WindowService):
         self._disconnect_window_state_signals()
         self._disconnect_screen_signals()
         self._screen = None
+        self._tracking_diagnostic = WindowTrackingDiagnostic(
+            status="stopped", detail="Window tracking has stopped."
+        )
 
     def activate(self, window_id: WindowId) -> ActionResult:
         """Activate one X11 window by backend-neutral window ID."""

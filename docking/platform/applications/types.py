@@ -83,6 +83,17 @@ class TransientApplicationInfo:
 ApplicationListing = ApplicationInfo | TransientApplicationInfo
 
 
+@dataclass(frozen=True, slots=True)
+class ApplicationDiscoveryDiagnostic:
+    """Counts and source order from the last completed registry discovery."""
+
+    generation: int
+    registered_count: int
+    visible_count: int
+    directories: tuple[Path, ...]
+    loaded: bool
+
+
 class MatchMethod(Enum):
     """Evidence route that selected an application identity."""
 
@@ -125,15 +136,35 @@ class ApplicationMatch:
         return None
 
 
+class MatchFailureReason(Enum):
+    """Why runtime identity did not produce an application match."""
+
+    NO_IDENTITY = "no-identity"
+    NO_MATCH = "no-match"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ApplicationMatchAttempt:
+    """Identity evidence retained even when no application matches."""
+
+    match: ApplicationMatch | None
+    pid: int | None = None
+    executable_path: Path | None = None
+    failure_reason: MatchFailureReason | None = None
+
+
 __all__ = [
     "ActionSource",
     "ApplicationAction",
+    "ApplicationDiscoveryDiagnostic",
     "ApplicationInfo",
     "ApplicationListing",
     "ApplicationLocation",
     "ApplicationMatch",
+    "ApplicationMatchAttempt",
     "ApplicationOrigin",
     "MatchEvidence",
+    "MatchFailureReason",
     "MatchMethod",
     "TransientApplicationInfo",
 ]

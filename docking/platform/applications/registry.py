@@ -20,6 +20,7 @@ from docking.log import get_logger, with_context
 from . import discovery
 from . import entries as desktop_entries
 from .types import (
+    ApplicationDiscoveryDiagnostic,
     ApplicationInfo,
     TransientApplicationInfo,
 )
@@ -43,6 +44,7 @@ def _content_handler_is_visible(app_info: object) -> bool:
 @dataclass(frozen=True, slots=True)
 class _RegistryState:
     generation: int
+    directories: tuple[Path, ...]
     handle_epoch: int
     applications_by_id: Mapping[str, ApplicationInfo]
     visible: tuple[ApplicationInfo, ...]
@@ -56,6 +58,7 @@ class _RegistryState:
 def _empty_state() -> _RegistryState:
     return _RegistryState(
         generation=0,
+        directories=(),
         handle_epoch=0,
         applications_by_id=MappingProxyType({}),
         visible=(),
@@ -113,6 +116,16 @@ class ApplicationRegistry:
     def generation(self) -> int:
         """Return the current immutable generation number."""
         return self._state.generation
+
+    def diagnostic_snapshot(self) -> ApplicationDiscoveryDiagnostic:
+        """Read discovery evidence without consulting Gio or scanning directories."""
+        return ApplicationDiscoveryDiagnostic(
+            generation=self.generation,
+            registered_count=len(self._state.applications_by_id),
+            visible_count=len(self._state.visible),
+            directories=self._state.directories,
+            loaded=self._loaded,
+        )
 
     def snapshot(self) -> tuple[ApplicationInfo, ...]:
         """Return visible applications in stable presentation order."""
@@ -196,6 +209,7 @@ class ApplicationRegistry:
             self._state = replace(
                 current,
                 handle_epoch=handle_epoch,
+                directories=built.directories,
                 gio_handles=built.gio_handles,
                 unidentified=built.unidentified,
                 unidentified_gio_handles=built.unidentified_gio_handles,
@@ -388,6 +402,7 @@ class ApplicationRegistry:
             unidentified=result.transient,
             unidentified_handles=result.transient_handles,
             presentation_order=result.presentation_order,
+            directories=result.directories,
         )
 
     def _application_for_content_type_result(
@@ -601,6 +616,7 @@ def _build_state(
     unidentified: Iterable[TransientApplicationInfo],
     unidentified_handles: Mapping[str, object],
     presentation_order: Iterable[str],
+    directories: tuple[Path, ...] = (),
 ) -> _RegistryState:
     applications_by_id: dict[str, ApplicationInfo] = {}
     for application in applications:
@@ -643,6 +659,7 @@ def _build_state(
 
     return _RegistryState(
         generation=0,
+        directories=directories,
         handle_epoch=handle_epoch,
         applications_by_id=MappingProxyType(applications_by_id),
         visible=visible,

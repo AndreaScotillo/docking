@@ -37,6 +37,8 @@ from docking.platform.diagnostics import (
 
 if TYPE_CHECKING:
     from docking.core.config import Config
+    from docking.platform.applications.registry import ApplicationRegistry
+    from docking.platform.backends.base import SessionBackend
 
 DIAGNOSTICS_WINDOW_WIDTH_PX = 720
 DIAGNOSTICS_WINDOW_HEIGHT_PX = 560
@@ -57,14 +59,16 @@ class DiagnosticsDialogController:
         self,
         *,
         parent: Gtk.Window,
-        backend: object,
+        backend: SessionBackend,
         config: Config | None = None,
         edge_gap_provider: Callable[[], int] | None = None,
+        application_registry: ApplicationRegistry,
     ) -> None:
         self._parent = parent
         self._backend = backend
         self._config = config
         self._edge_gap_provider = edge_gap_provider
+        self._application_registry = application_registry
         self._window: Gtk.Window | None = None
         self._snapshot: DiagnosticsSnapshot | None = None
 
@@ -368,6 +372,7 @@ class DiagnosticsDialogController:
             display=self._parent.get_display(),
             config=self._config,
             edge_gap=self._edge_gap_provider() if self._edge_gap_provider else None,
+            application_registry=self._application_registry,
         )
 
     def _on_copy_report(self, *_args: object) -> None:

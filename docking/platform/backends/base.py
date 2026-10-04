@@ -26,6 +26,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
+from .diagnostics import WindowTrackingDiagnostic
+
 
 class DisplayServer(Enum):
     """Display-server family used by the selected session backend."""
@@ -249,6 +251,10 @@ class Service(ABC):
 
 class WindowService(Service):
     """Taskbar/window state and window actions."""
+
+    def diagnostic_snapshot(self) -> WindowTrackingDiagnostic:
+        """Read captured evidence without enumerating windows or changing state."""
+        return WindowTrackingDiagnostic()
 
     @abstractmethod
     def list_all_windows(self) -> Sequence[WindowSnapshot]:

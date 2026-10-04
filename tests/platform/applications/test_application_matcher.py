@@ -14,6 +14,7 @@ from docking.platform.applications.types import (
     ApplicationInfo,
     ApplicationLocation,
     ApplicationOrigin,
+    MatchFailureReason,
     MatchMethod,
 )
 
@@ -52,6 +53,29 @@ class _Processes:
     def identity_for_pid(self, pid: int | None) -> ProcessIdentity | None:
         del pid
         return self.identity
+
+
+def test_match_attempt_retains_unsuccessful_process_evidence(monkeypatch):
+    from unittest.mock import MagicMock
+
+    registry = _Registry()
+    processes = _Processes()
+    processes.identity = ProcessIdentity(pid=41, executable_path=Path("/opt/unknown"))
+    resolver = MagicMock(wraps=processes.identity_for_pid)
+    monkeypatch.setattr(processes, "identity_for_pid", resolver)
+    matcher = AppIdMatcher(registry, processes)
+
+    attempt = matcher.match_attempt("Unknown", process_id=41)
+    assert attempt.match is None
+    assert attempt.failure_reason is MatchFailureReason.NO_MATCH
+    assert attempt.pid == 41
+    assert attempt.executable_path == Path("/opt/unknown")
+    resolver.assert_called_once_with(41)
+    assert (
+        matcher.match_attempt("", process_id=41).failure_reason
+        is MatchFailureReason.NO_IDENTITY
+    )
+    assert matcher.match_result("Unknown", process_id=41) is None
 
 
 def _application(

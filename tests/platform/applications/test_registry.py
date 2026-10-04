@@ -31,6 +31,34 @@ class _Icon:
         return self.value
 
 
+def test_diagnostics_use_last_discovery_and_count_nodisplay(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    (first / "visible.desktop").write_text(
+        "[Desktop Entry]\nType=Application\nName=Visible\nExec=true\n"
+    )
+    (first / "hidden-menu.desktop").write_text(
+        "[Desktop Entry]\nType=Application\nName=Hidden Menu\nExec=true\nNoDisplay=true\n"
+    )
+    source = MagicMock(return_value=(first,))
+    registry = ApplicationRegistry(
+        application_source=lambda: (), desktop_directories_source=source
+    )
+    assert not registry.diagnostic_snapshot().loaded
+    registry.refresh()
+    source.return_value = (second,)
+    source.reset_mock()
+    snapshot = registry.diagnostic_snapshot()
+    assert snapshot.registered_count == 2
+    assert snapshot.visible_count == 1
+    assert snapshot.directories == (first,)
+    assert snapshot.generation == registry.generation
+    source.assert_not_called()
+    registry.refresh()
+    assert registry.diagnostic_snapshot().directories == (second,)
+
+
 class _GioApplication:
     def __init__(
         self,

@@ -190,6 +190,7 @@ class TestBuildDockWindow:
         assert result.search is components.search
         assert result.settings is components.settings
         diagnostics_kwargs = factory_mod.DiagnosticsDialogController.call_args.kwargs
+        assert diagnostics_kwargs["application_registry"] is application_registry
         assert diagnostics_kwargs["config"] is config
         config.additional_distance_from_edge = 3
         window.theme = SimpleNamespace(distance_from_edge=5)
