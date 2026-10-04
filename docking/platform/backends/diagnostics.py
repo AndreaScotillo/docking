@@ -5,11 +5,31 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass, replace
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from docking.platform.applications.types import ApplicationMatch
+
+
+class WindowReason(Enum):
+    """Why a tracking scan included, omitted, or failed to read a window."""
+
+    INCLUDED = "included"
+    NO_MATCH = "no-match"
+    NO_IDENTITY = "no-identity"
+    EMPTY_CLASS = "empty-class"
+    CLASS_READ_FAILED = "class-read-failed"
+    WORKSPACE = "workspace"
+    XID_READ_FAILED = "xid-read-failed"
+    WINDOW_TYPE_READ_FAILED = "window-type-read-failed"
+    DESKTOP_OR_DOCK = "desktop-or-dock"
+    SKIP_TASKLIST = "skip-tasklist"
+    SKIP_TASKLIST_READ_FAILED = "skip-tasklist-read-failed"
+    SKIP_TASKBAR = "skip-taskbar"
+    OWN_PROCESS = "own-process"
+    INVALID_WINDOW_ID = "invalid-window-id"
 
 
 @dataclass(frozen=True)
@@ -22,7 +42,7 @@ class WindowDiagnostic:
     executable_path: str | None = None
     workspace: str | None = None
     outcome: Literal["matched", "unmatched", "excluded", "error"] = "unmatched"
-    reason: str = "no-match"
+    reason: WindowReason = WindowReason.NO_MATCH
     desktop_id: str | None = None
     match_method: str | None = None
     matched_identity: str | None = None
@@ -62,7 +82,7 @@ def with_match(
     return replace(
         record,
         outcome="matched",
-        reason="included",
+        reason=WindowReason.INCLUDED,
         desktop_id=match.desktop_id,
         match_method=match.evidence.method.value,
         matched_identity=match.evidence.raw_app_id,

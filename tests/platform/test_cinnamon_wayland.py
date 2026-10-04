@@ -15,6 +15,7 @@ from docking.platform.applications.types import (
 from docking.platform.backends.base import ActionResult
 from docking.platform.backends.cinnamon.muffin import MuffinWindowService
 from docking.platform.backends.cinnamon.session import CinnamonWaylandSessionBackend
+from docking.platform.backends.diagnostics import WindowReason
 from tests.platform.application_fakes import identity_services
 
 
@@ -81,8 +82,8 @@ def test_muffin_diagnostics_capture_all_rows_and_lifecycle():
         ("app-id", "unknown"),
         ("sandboxed-app-id", "firefox"),
     )
-    assert snapshot.windows[3].reason == "no-identity"
-    assert snapshot.windows[4].reason == "invalid-window-id"
+    assert snapshot.windows[3].reason is WindowReason.NO_IDENTITY
+    assert snapshot.windows[4].reason is WindowReason.INVALID_WINDOW_ID
     assert "PRIVATE-DOCUMENT" not in repr(snapshot)
     assert (
         model.update_running.call_args.kwargs["running"]["firefox.desktop"].count == 1

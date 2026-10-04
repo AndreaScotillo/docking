@@ -20,6 +20,7 @@ from .types import (
     ApplicationMatchAttempt,
     ApplicationOrigin,
     MatchEvidence,
+    MatchFailureReason,
     MatchMethod,
 )
 
@@ -312,9 +313,9 @@ class AppIdMatcher:
             failure_reason=(
                 None
                 if match is not None
-                else "no-identity"
+                else MatchFailureReason.NO_IDENTITY
                 if not app_id.strip()
-                else "no-match"
+                else MatchFailureReason.NO_MATCH
             ),
         )
 

@@ -178,6 +178,7 @@ from docking.platform.backends.base import (
 )
 from docking.platform.backends.diagnostics import (
     WindowDiagnostic,
+    WindowReason,
     WindowTrackingDiagnostic,
     with_match,
 )
@@ -250,13 +251,13 @@ class WindowMatcher:
                         if attempt.executable_path
                         else None
                     ),
-                    reason="empty-class",
+                    reason=WindowReason.EMPTY_CLASS,
                     read_errors=tuple(self._identity_read_errors),
                 )
                 return None
             self.last_diagnostic = WindowDiagnostic(
                 outcome="error",
-                reason="class-read-failed",
+                reason=WindowReason.CLASS_READ_FAILED,
                 read_errors=tuple(self._identity_read_errors),
             )
             return None
@@ -278,7 +279,7 @@ class WindowMatcher:
                 executable_path=(
                     str(attempt.executable_path) if attempt.executable_path else None
                 ),
-                reason=attempt.failure_reason or "included",
+                reason=WindowReason.NO_MATCH,
                 read_errors=tuple(self._identity_read_errors),
             ),
             attempt.match,
@@ -492,7 +493,7 @@ class WindowTracker:
             ):
                 records.append(
                     self._diagnostic_record(
-                        window, outcome="excluded", reason="workspace"
+                        window, outcome="excluded", reason=WindowReason.WORKSPACE
                     )
                 )
                 continue
@@ -526,7 +527,7 @@ class WindowTracker:
                     replace(
                         record,
                         outcome="error",
-                        reason="xid-read-failed",
+                        reason=WindowReason.XID_READ_FAILED,
                     )
                 )
 
@@ -558,7 +559,10 @@ class WindowTracker:
 
     @staticmethod
     def _diagnostic_record(
-        window: Wnck.Window, *, outcome="unmatched", reason="no-match"
+        window: Wnck.Window,
+        *,
+        outcome="unmatched",
+        reason: WindowReason = WindowReason.NO_MATCH,
     ) -> WindowDiagnostic:
         try:
             window_id = str(WindowId.x11(window.get_xid()))
@@ -599,7 +603,7 @@ class WindowTracker:
             try:
                 window_type = window.get_window_type()
             except _RECOVERABLE_ERRORS as exc:
-                record(window, "error", "window-type-read-failed")
+                record(window, "error", WindowReason.WINDOW_TYPE_READ_FAILED)
                 log.bind(action="window_type").warning(
                     f"Skipping window: failed to read window type: {exc}"
                 )
@@ -608,14 +612,14 @@ class WindowTracker:
             # protects later matching code from desktop-shell windows that can
             # be unsafe to query for WM_CLASS on some environments.
             if window_type in (Wnck.WindowType.DESKTOP, Wnck.WindowType.DOCK):
-                record(window, "excluded", "desktop-or-dock")
+                record(window, "excluded", WindowReason.DESKTOP_OR_DOCK)
                 continue
             try:
                 if window.is_skip_tasklist():
-                    record(window, "excluded", "skip-tasklist")
+                    record(window, "excluded", WindowReason.SKIP_TASKLIST)
                     continue
             except _RECOVERABLE_ERRORS as exc:
-                record(window, "error", "skip-tasklist-read-failed")
+                record(window, "error", WindowReason.SKIP_TASKLIST_READ_FAILED)
                 log.bind(action="skip_tasklist").warning(
                     f"Skipping window: failed to read skip-tasklist state: {exc}"
                 )
@@ -623,7 +627,7 @@ class WindowTracker:
             # Never track windows belonging to Docking itself (settings dialog, etc.).
             try:
                 if window.get_pid() == own_pid:
-                    record(window, "excluded", "own-process")
+                    record(window, "excluded", WindowReason.OWN_PROCESS)
                     continue
             except _RECOVERABLE_ERRORS:
                 pass

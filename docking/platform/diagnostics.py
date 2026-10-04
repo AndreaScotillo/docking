@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Literal
 from docking import __version__
 from docking.platform.applications.types import ApplicationDiscoveryDiagnostic
 from docking.platform.backends.base import DisplayServer, PlatformCapabilities
-from docking.platform.backends.diagnostics import WindowTrackingDiagnostic
+from docking.platform.backends.diagnostics import WindowReason, WindowTrackingDiagnostic
 from docking.platform.environment import (
     backend_name,
     compositor_active,
@@ -386,8 +386,8 @@ def _application_diagnostic_lines(snapshot: DiagnosticsSnapshot) -> list[str]:
     for index, row in enumerate(tracking.windows, 1):
         reason = (
             "no matching application found"
-            if row.reason == "no-match"
-            else _report_value(row.reason)
+            if row.reason is WindowReason.NO_MATCH
+            else _report_value(row.reason.value)
         )
         lines.extend(
             [

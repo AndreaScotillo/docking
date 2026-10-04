@@ -26,6 +26,7 @@ from docking.platform.backends.base import (
 )
 from docking.platform.backends.diagnostics import (
     WindowDiagnostic,
+    WindowReason,
     WindowTrackingDiagnostic,
     with_match,
 )
@@ -166,7 +167,9 @@ class MuffinWindowService(WindowService):
             window = self._window_from_row(row)
             record = self._last_window_diagnostic
             if window is not None and _bool(row, "skip-taskbar"):
-                record = replace(record, outcome="excluded", reason="skip-taskbar")
+                record = replace(
+                    record, outcome="excluded", reason=WindowReason.SKIP_TASKBAR
+                )
             records.append(record)
             if window is not None and not _bool(row, "skip-taskbar"):
                 windows[window.muffin_id] = window
@@ -234,7 +237,7 @@ class MuffinWindowService(WindowService):
         muffin_id = _int(row, "id")
         if muffin_id is None:
             self._last_window_diagnostic = WindowDiagnostic(
-                outcome="error", reason="invalid-window-id"
+                outcome="error", reason=WindowReason.INVALID_WINDOW_ID
             )
             return None
         identities = tuple(
@@ -288,7 +291,9 @@ class MuffinWindowService(WindowService):
                     if (workspace := _int(row, "workspace")) is not None
                     else None
                 ),
-                reason="no-match" if identities else "no-identity",
+                reason=WindowReason.NO_MATCH
+                if identities
+                else WindowReason.NO_IDENTITY,
             ),
             match,
         )

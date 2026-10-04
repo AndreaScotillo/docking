@@ -11,6 +11,7 @@ from docking.platform.applications.types import ApplicationDiscoveryDiagnostic
 from docking.platform.backends.base import DisplayServer, PlatformCapabilities
 from docking.platform.backends.diagnostics import (
     WindowDiagnostic,
+    WindowReason,
     WindowTrackingDiagnostic,
 )
 from docking.platform.diagnostics import collect_diagnostics, format_diagnostics_report
@@ -53,12 +54,12 @@ def test_window_report_uses_cached_evidence_and_escapes_dynamic_values(monkeypat
                 pid=42,
                 executable_path="/opt/app",
                 workspace="2",
-                reason="no-match",
+                reason=WindowReason.NO_MATCH,
             ),
             WindowDiagnostic(
                 window_id="x11:43",
                 outcome="matched",
-                reason="included",
+                reason=WindowReason.INCLUDED,
                 desktop_id="app.desktop",
                 match_method="wm-class",
                 desktop_file="/applications/app.desktop",

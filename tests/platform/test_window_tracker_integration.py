@@ -28,6 +28,7 @@ from docking.platform.applications.types import (
     MatchMethod,
 )
 from docking.platform.backends.base import ActionResult, DisplayServer, WindowId
+from docking.platform.backends.diagnostics import WindowReason
 from docking.platform.model import DockItem
 
 
@@ -172,9 +173,9 @@ def test_diagnostics_capture_real_matching_without_changing_running_state(tracke
     assert rows["x11:1"].outcome == "matched"
     assert rows["x11:1"].desktop_id == "firefox.desktop"
     assert rows["x11:1"].match_method == "visible-alias"
-    assert rows["x11:2"].reason == "no-match"
+    assert rows["x11:2"].reason is WindowReason.NO_MATCH
     assert rows["x11:2"].identities[0] == ("wm-class", "Unknown")
-    assert rows["x11:3"].reason == "empty-class"
+    assert rows["x11:3"].reason is WindowReason.EMPTY_CLASS
     assert set(model.update_running.call_args.kwargs["running"]) == {"firefox.desktop"}
     model.reset_mock()
     assert tracker.diagnostic_snapshot() is snapshot
@@ -203,10 +204,10 @@ def test_diagnostics_exclusions_do_not_query_shell_identities(tracker_env):
     tracker._screen = FakeScreen(windows, None)
     tracker._update_running()
     assert [row.reason for row in tracker.diagnostic_snapshot().windows] == [
-        "desktop-or-dock",
-        "desktop-or-dock",
-        "skip-tasklist",
-        "own-process",
+        WindowReason.DESKTOP_OR_DOCK,
+        WindowReason.DESKTOP_OR_DOCK,
+        WindowReason.SKIP_TASKLIST,
+        WindowReason.OWN_PROCESS,
     ]
 
 
@@ -228,9 +229,9 @@ def test_diagnostics_workspace_and_property_errors(tracker_env):
     tracker._screen = FakeScreen([OtherWorkspace(1), BrokenClass(2)], None, object())
     tracker._update_running()
     rows = {row.window_id: row for row in tracker.diagnostic_snapshot().windows}
-    assert rows["x11:1"].reason == "workspace"
+    assert rows["x11:1"].reason is WindowReason.WORKSPACE
     assert rows["x11:2"].outcome == "error"
-    assert rows["x11:2"].reason == "class-read-failed"
+    assert rows["x11:2"].reason is WindowReason.CLASS_READ_FAILED
     assert rows["x11:2"].read_errors == ("wm-class",)
 
 

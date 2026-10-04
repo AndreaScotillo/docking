@@ -136,6 +136,13 @@ class ApplicationMatch:
         return None
 
 
+class MatchFailureReason(Enum):
+    """Why runtime identity did not produce an application match."""
+
+    NO_IDENTITY = "no-identity"
+    NO_MATCH = "no-match"
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApplicationMatchAttempt:
     """Identity evidence retained even when no application matches."""
@@ -143,7 +150,7 @@ class ApplicationMatchAttempt:
     match: ApplicationMatch | None
     pid: int | None = None
     executable_path: Path | None = None
-    failure_reason: str | None = None
+    failure_reason: MatchFailureReason | None = None
 
 
 __all__ = [
@@ -157,6 +164,7 @@ __all__ = [
     "ApplicationMatchAttempt",
     "ApplicationOrigin",
     "MatchEvidence",
+    "MatchFailureReason",
     "MatchMethod",
     "TransientApplicationInfo",
 ]

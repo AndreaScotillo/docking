@@ -14,6 +14,7 @@ from docking.platform.applications.types import (
     ApplicationInfo,
     ApplicationLocation,
     ApplicationOrigin,
+    MatchFailureReason,
     MatchMethod,
 )
 
@@ -66,11 +67,14 @@ def test_match_attempt_retains_unsuccessful_process_evidence(monkeypatch):
 
     attempt = matcher.match_attempt("Unknown", process_id=41)
     assert attempt.match is None
-    assert attempt.failure_reason == "no-match"
+    assert attempt.failure_reason is MatchFailureReason.NO_MATCH
     assert attempt.pid == 41
     assert attempt.executable_path == Path("/opt/unknown")
     resolver.assert_called_once_with(41)
-    assert matcher.match_attempt("", process_id=41).failure_reason == "no-identity"
+    assert (
+        matcher.match_attempt("", process_id=41).failure_reason
+        is MatchFailureReason.NO_IDENTITY
+    )
     assert matcher.match_result("Unknown", process_id=41) is None
 
 
