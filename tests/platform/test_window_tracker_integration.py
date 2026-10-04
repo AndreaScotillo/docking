@@ -156,6 +156,115 @@ class FakeScreen:
         return self._active_workspace
 
 
+def test_diagnostics_capture_real_matching_without_changing_running_state(tracker_env):
+    tracker, model, registry = tracker_env
+    known = FakeWindow(1, class_group="Firefox")
+    unknown = FakeWindow(2, class_group="Unknown")
+    empty = FakeWindow(3, class_group="")
+    tracker._screen = FakeScreen([known, unknown, empty], known)
+    assert tracker.diagnostic_snapshot().status == "pending"
+
+    tracker._update_running()
+
+    snapshot = tracker.diagnostic_snapshot()
+    rows = {row.window_id: row for row in snapshot.windows}
+    assert snapshot.registry_generation == registry.generation
+    assert rows["x11:1"].outcome == "matched"
+    assert rows["x11:1"].desktop_id == "firefox.desktop"
+    assert rows["x11:1"].match_method == "visible-alias"
+    assert rows["x11:2"].reason == "no-match"
+    assert rows["x11:2"].identities[0] == ("wm-class", "Unknown")
+    assert rows["x11:3"].reason == "empty-class"
+    assert set(model.update_running.call_args.kwargs["running"]) == {"firefox.desktop"}
+    model.reset_mock()
+    assert tracker.diagnostic_snapshot() is snapshot
+    model.update_running.assert_not_called()
+    tracker._screen._windows = []
+    tracker._update_running()
+    assert tracker.diagnostic_snapshot().windows == ()
+    assert snapshot.windows  # Earlier immutable capture remains unchanged.
+
+
+def test_diagnostics_exclusions_do_not_query_shell_identities(tracker_env):
+    import os
+
+    tracker, _model, _registry = tracker_env
+
+    class ShellWindow(FakeWindow):
+        def get_class_group_name(self):
+            pytest.fail("Must not read identity on an excluded shell window")
+
+    windows = [
+        ShellWindow(1, window_type=1),
+        ShellWindow(2, window_type=2),
+        ShellWindow(3, skip_tasklist=True),
+        ShellWindow(4, pid=os.getpid()),
+    ]
+    tracker._screen = FakeScreen(windows, None)
+    tracker._update_running()
+    assert [row.reason for row in tracker.diagnostic_snapshot().windows] == [
+        "desktop-or-dock",
+        "desktop-or-dock",
+        "skip-tasklist",
+        "own-process",
+    ]
+
+
+def test_diagnostics_workspace_and_property_errors(tracker_env):
+    tracker, _model, _registry = tracker_env
+    tracker._config.current_workspace_only = True
+
+    class OtherWorkspace(FakeWindow):
+        def is_on_workspace(self, workspace):
+            return False
+
+    class BrokenClass(FakeWindow):
+        def is_on_workspace(self, workspace):
+            return True
+
+        def get_class_group_name(self):
+            raise TypeError("Failed read")
+
+    tracker._screen = FakeScreen([OtherWorkspace(1), BrokenClass(2)], None, object())
+    tracker._update_running()
+    rows = {row.window_id: row for row in tracker.diagnostic_snapshot().windows}
+    assert rows["x11:1"].reason == "workspace"
+    assert rows["x11:2"].outcome == "error"
+    assert rows["x11:2"].reason == "class-read-failed"
+    assert rows["x11:2"].read_errors == ("wm-class",)
+
+
+def test_diagnostics_record_failed_enumeration_without_publishing(tracker_env):
+    tracker, model, _registry = tracker_env
+
+    class BrokenScreen(FakeScreen):
+        def get_windows(self):
+            raise TypeError("PRIVATE-ERROR")
+
+    tracker._screen = BrokenScreen([], None)
+    with pytest.raises(TypeError):
+        tracker._update_running()
+    snapshot = tracker.diagnostic_snapshot()
+    assert snapshot.status == "failed"
+    assert snapshot.scanned_at is not None
+    assert "PRIVATE-ERROR" not in repr(snapshot)
+    model.update_running.assert_not_called()
+
+
+def test_x11_window_service_stop_clears_scan(tracker_env):
+    from docking.platform.backends.x11.services.windows import X11WindowService
+
+    _tracker, model, _registry = tracker_env
+    service = X11WindowService(model=model, config=Config(), **identity_services())
+    service._screen = FakeScreen([FakeWindow(1, class_group="firefox")], None)
+    service._update_running()
+    assert service.diagnostic_snapshot().windows
+    service.stop()
+    assert service.diagnostic_snapshot().status == "stopped"
+    assert service.diagnostic_snapshot().windows == ()
+    assert service.diagnostic_snapshot().scanned_at is None
+
+
 def _matched_desktop_id(matcher, window) -> str | None:
     result = matcher.match_result(window)
     return result.desktop_id if result is not None else None

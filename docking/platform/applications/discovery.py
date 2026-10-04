@@ -35,6 +35,7 @@ class DiscoveryResult:
     transient: tuple[TransientApplicationInfo, ...]
     transient_handles: dict[str, object]
     presentation_order: tuple[str, ...]
+    directories: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +166,7 @@ def discover(
         handles[application_id] = app_info
 
     return DiscoveryResult(
+        directories=directories,
         applications=tuple(applications),
         handles=handles,
         transient=tuple(transient),

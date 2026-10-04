@@ -144,6 +144,7 @@ def build_dock_window(
         backend=session_backend,
         config=config,
         edge_gap_provider=lambda: effective_edge_gap(window.theme, config),
+        application_registry=application_registry,
     )
     search = GlobalSearchController(
         config=config,
