@@ -20,6 +20,7 @@ from docking.log import get_logger, with_context
 from . import discovery
 from . import entries as desktop_entries
 from .types import (
+    ApplicationDiscoveryDiagnostic,
     ApplicationInfo,
     TransientApplicationInfo,
 )
@@ -43,6 +44,7 @@ def _content_handler_is_visible(app_info: object) -> bool:
 @dataclass(frozen=True, slots=True)
 class _RegistryState:
     generation: int
+    directories: tuple[Path, ...]
     handle_epoch: int
     applications_by_id: Mapping[str, ApplicationInfo]
     visible: tuple[ApplicationInfo, ...]
@@ -51,11 +53,13 @@ class _RegistryState:
     gio_handles: Mapping[str, object]
     unidentified: tuple[TransientApplicationInfo, ...]
     unidentified_gio_handles: Mapping[str, object]
+    diagnostic: ApplicationDiscoveryDiagnostic
 
 
 def _empty_state() -> _RegistryState:
     return _RegistryState(
         generation=0,
+        directories=(),
         handle_epoch=0,
         applications_by_id=MappingProxyType({}),
         visible=(),
@@ -64,6 +68,7 @@ def _empty_state() -> _RegistryState:
         gio_handles=MappingProxyType({}),
         unidentified=(),
         unidentified_gio_handles=MappingProxyType({}),
+        diagnostic=ApplicationDiscoveryDiagnostic(0, 0, 0, (), False),
     )
 
 
@@ -113,6 +118,10 @@ class ApplicationRegistry:
     def generation(self) -> int:
         """Return the current immutable generation number."""
         return self._state.generation
+
+    def diagnostic_snapshot(self) -> ApplicationDiscoveryDiagnostic:
+        """Read discovery evidence without consulting Gio or scanning directories."""
+        return self._state.diagnostic
 
     def snapshot(self) -> tuple[ApplicationInfo, ...]:
         """Return visible applications in stable presentation order."""
@@ -190,15 +199,18 @@ class ApplicationRegistry:
             self._state = replace(
                 built,
                 generation=current.generation + 1,
+                diagnostic=replace(built.diagnostic, generation=current.generation + 1),
             )
             self._notify_listeners()
         else:
             self._state = replace(
                 current,
                 handle_epoch=handle_epoch,
+                directories=built.directories,
                 gio_handles=built.gio_handles,
                 unidentified=built.unidentified,
                 unidentified_gio_handles=built.unidentified_gio_handles,
+                diagnostic=replace(built.diagnostic, generation=current.generation),
             )
         self._content_gio_handles.clear()
 
@@ -381,13 +393,23 @@ class ApplicationRegistry:
             desktop_app_info_from_filename=self._desktop_app_info_from_filename,
             handle_epoch=handle_epoch,
         )
-        return _build_state(
+        state = _build_state(
             handle_epoch=handle_epoch,
             applications=result.applications,
             handles=result.handles,
             unidentified=result.transient,
             unidentified_handles=result.transient_handles,
             presentation_order=result.presentation_order,
+            directories=result.directories,
+        )
+        return replace(
+            state,
+            diagnostic=replace(
+                state.diagnostic,
+                applications=result.diagnostics,
+                decisions=result.decisions,
+                directory_statuses=result.directory_statuses,
+            ),
         )
 
     def _application_for_content_type_result(
@@ -601,6 +623,7 @@ def _build_state(
     unidentified: Iterable[TransientApplicationInfo],
     unidentified_handles: Mapping[str, object],
     presentation_order: Iterable[str],
+    directories: tuple[Path, ...] = (),
 ) -> _RegistryState:
     applications_by_id: dict[str, ApplicationInfo] = {}
     for application in applications:
@@ -643,6 +666,7 @@ def _build_state(
 
     return _RegistryState(
         generation=0,
+        directories=directories,
         handle_epoch=handle_epoch,
         applications_by_id=MappingProxyType(applications_by_id),
         visible=visible,
@@ -662,6 +686,13 @@ def _build_state(
                 for listing_key, handle in unidentified_handles.items()
                 if listing_key in listing_keys
             }
+        ),
+        diagnostic=ApplicationDiscoveryDiagnostic(
+            generation=0,
+            registered_count=len(applications_by_id),
+            visible_count=len(visible),
+            directories=directories,
+            loaded=True,
         ),
     )
 

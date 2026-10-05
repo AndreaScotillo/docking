@@ -83,6 +83,74 @@ class TransientApplicationInfo:
 ApplicationListing = ApplicationInfo | TransientApplicationInfo
 
 
+@dataclass(frozen=True, slots=True)
+class ApplicationDiagnostic:
+    """Shareable effective metadata and declarations for a registered app."""
+
+    desktop_id: str
+    name: str
+    desktop_file: Path | None
+    visible: bool
+    has_gio_source: bool
+    wm_class: str
+    launcher_basename: str
+    aliases: tuple[str, ...]
+    gio_startup_wm_class: str | None = None
+    file_startup_wm_class: str | None = None
+
+
+class DiscoveryReason(Enum):
+    """Why a discovery source was overridden or could not be registered."""
+
+    SHADOWED = "shadowed-source"
+    HIDDEN = "hidden-entry"
+    NON_APPLICATION = "non-application-entry"
+    UNREADABLE = "unreadable-metadata"
+    NO_IDENTITY = "missing-desktop-id"
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryDecision:
+    """Source evidence retained even when no canonical application results."""
+
+    source: str
+    reason: DiscoveryReason
+    desktop_id: str = ""
+    desktop_file: Path | None = None
+    name: str = ""
+    startup_wm_class: str | None = None
+    launcher_basename: str = ""
+    winning_path: Path | None = None
+
+
+class DiscoveryDirectoryStatus(Enum):
+    """Whether normal discovery could enumerate an application directory."""
+
+    SEARCHED = "searched"
+    MISSING = "missing"
+    UNREADABLE = "unreadable"
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryDirectoryDiagnostic:
+    path: Path
+    status: DiscoveryDirectoryStatus
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationDiscoveryDiagnostic:
+    """Immutable evidence from the last completed registry discovery."""
+
+    generation: int
+    registered_count: int
+    visible_count: int
+    directories: tuple[Path, ...]
+    loaded: bool
+    applications: tuple[ApplicationDiagnostic, ...] = ()
+    decisions: tuple[DiscoveryDecision, ...] = ()
+    directory_statuses: tuple[DiscoveryDirectoryDiagnostic, ...] = ()
+
+
 class MatchMethod(Enum):
     """Evidence route that selected an application identity."""
 
@@ -125,15 +193,40 @@ class ApplicationMatch:
         return None
 
 
+class MatchFailureReason(Enum):
+    """Why runtime identity did not produce an application match."""
+
+    NO_IDENTITY = "no-identity"
+    NO_MATCH = "no-match"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ApplicationMatchAttempt:
+    """Identity evidence retained even when no application matches."""
+
+    match: ApplicationMatch | None
+    pid: int | None = None
+    executable_path: Path | None = None
+    failure_reason: MatchFailureReason | None = None
+
+
 __all__ = [
     "ActionSource",
     "ApplicationAction",
+    "ApplicationDiagnostic",
+    "ApplicationDiscoveryDiagnostic",
     "ApplicationInfo",
     "ApplicationListing",
     "ApplicationLocation",
     "ApplicationMatch",
+    "ApplicationMatchAttempt",
     "ApplicationOrigin",
+    "DiscoveryDecision",
+    "DiscoveryDirectoryDiagnostic",
+    "DiscoveryDirectoryStatus",
+    "DiscoveryReason",
     "MatchEvidence",
+    "MatchFailureReason",
     "MatchMethod",
     "TransientApplicationInfo",
 ]

@@ -17,8 +17,10 @@ from .types import (
     ApplicationInfo,
     ApplicationLocation,
     ApplicationMatch,
+    ApplicationMatchAttempt,
     ApplicationOrigin,
     MatchEvidence,
+    MatchFailureReason,
     MatchMethod,
 )
 
@@ -276,13 +278,62 @@ class AppIdMatcher:
         process_id: int | None = None,
     ) -> ApplicationMatch | None:
         """Return the selected ID, canonical metadata, and exact evidence route."""
+        return self.match_attempt(
+            app_id,
+            instance_hint=instance_hint,
+            prefer_raw_app_id=prefer_raw_app_id,
+            defer_wm_class_lookup=defer_wm_class_lookup,
+            process_id=process_id,
+        ).match
+
+    def match_attempt(
+        self,
+        app_id: str,
+        *,
+        instance_hint: str | None = None,
+        prefer_raw_app_id: bool = True,
+        defer_wm_class_lookup: bool = False,
+        process_id: int | None = None,
+    ) -> ApplicationMatchAttempt:
+        """Keep process evidence even when the existing matching decision fails."""
         self._sync_registry_generation()
+        process = self._process_identity_service.identity_for_pid(process_id)
+        match = self._match_with_process(
+            app_id,
+            instance_hint=instance_hint,
+            prefer_raw_app_id=prefer_raw_app_id,
+            defer_wm_class_lookup=defer_wm_class_lookup,
+            process_id=process_id,
+            process=process,
+        )
+        return ApplicationMatchAttempt(
+            match=match,
+            pid=process.pid if process is not None else _evidence_pid(process_id),
+            executable_path=process.executable_path if process is not None else None,
+            failure_reason=(
+                None
+                if match is not None
+                else MatchFailureReason.NO_IDENTITY
+                if not app_id.strip()
+                else MatchFailureReason.NO_MATCH
+            ),
+        )
+
+    def _match_with_process(
+        self,
+        app_id: str,
+        *,
+        instance_hint: str | None,
+        prefer_raw_app_id: bool,
+        defer_wm_class_lookup: bool,
+        process_id: int | None,
+        process: ProcessIdentity | None,
+    ) -> ApplicationMatch | None:
         raw_app_id = app_id
         app_id = app_id.strip()
         if not app_id:
             return None
         app_id_lower = app_id.lower().strip()
-        process = self._process_identity_service.identity_for_pid(process_id)
 
         if process is not None and process.launch is not None:
             desktop_id = process.launch.desktop_id

@@ -32,10 +32,17 @@ from docking.platform.backends.base import (
     WindowService,
     WindowSnapshot,
 )
+from docking.platform.backends.diagnostics import WindowTrackingDiagnostic
 
 
 class ReducedWindowService(WindowService):
     """WindowService for sessions without taskbar/window-management support."""
+
+    def diagnostic_snapshot(self) -> WindowTrackingDiagnostic:
+        return WindowTrackingDiagnostic(
+            status="unsupported",
+            detail="The selected backend does not track running windows.",
+        )
 
     def start(self) -> None:
         """No runtime state is tracked."""
