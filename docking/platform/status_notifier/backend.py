@@ -150,8 +150,8 @@ def parse_registered_item(
     """Parse watcher item identifiers into service/path pairs.
 
     Common forms are ``org.example.App``, ``org.example.App/StatusNotifierItem``,
-    ``:1.42/StatusNotifierItem``, or a path passed during registration, in which
-    case the D-Bus sender becomes the service.
+    ``:1.42/StatusNotifierItem``, GNOME's ``:1.42@/StatusNotifierItem``, or a path
+    passed during registration, in which case the D-Bus sender becomes the service.
     """
     raw = value.strip()
     if not raw:
@@ -159,13 +159,18 @@ def parse_registered_item(
     if raw.startswith("/"):
         if not default_service:
             return None
-        return RegisteredItemAddress(service=default_service, path=raw)
-    if "/" not in raw:
-        return RegisteredItemAddress(service=raw, path=DEFAULT_ITEM_PATH)
-    service, suffix = raw.split("/", 1)
-    if not service:
+        service, path = default_service, raw
+    elif "@/" in raw:
+        service, suffix = raw.split("@/", 1)
+        path = f"/{suffix}"
+    elif "/" in raw:
+        service, suffix = raw.split("/", 1)
+        path = f"/{suffix}"
+    else:
+        service, path = raw, DEFAULT_ITEM_PATH
+    if not Gio.dbus_is_name(service) or not GLib.Variant.is_object_path(path):
         return None
-    return RegisteredItemAddress(service=service, path=f"/{suffix}")
+    return RegisteredItemAddress(service=service, path=path)
 
 
 def tray_item_from_properties(
@@ -534,6 +539,10 @@ def _read_item(
     bus: Gio.DBusConnection,
     address: RegisteredItemAddress,
 ) -> TrayItem | None:
+    if not Gio.dbus_is_name(address.service) or not GLib.Variant.is_object_path(
+        address.path
+    ):
+        return None
     try:
         result = bus.call_sync(
             address.service,
@@ -546,18 +555,21 @@ def _read_item(
             METHOD_TIMEOUT_MS,
             None,
         )
-    except GLib.Error as exc:
+        reply = _unpack_variant(result)
+        if not isinstance(reply, (tuple, list)) or len(reply) != 1:
+            return None
+        properties = reply[0]
+        if not isinstance(properties, dict):
+            return None
+        return tray_item_from_properties(
+            address=address,
+            properties={
+                str(key): _unpack_variant(value) for key, value in properties.items()
+            },
+        )
+    except (GLib.Error, TypeError, ValueError, OverflowError) as exc:
         log.debug("Failed to read StatusNotifier item %s: %s", address.identifier, exc)
         return None
-    properties = _unpack_variant(result)[0]
-    if not isinstance(properties, dict):
-        return None
-    return tray_item_from_properties(
-        address=address,
-        properties={
-            str(key): _unpack_variant(value) for key, value in properties.items()
-        },
-    )
 
 
 def _tooltip_parts(value: object) -> tuple[str, str]:

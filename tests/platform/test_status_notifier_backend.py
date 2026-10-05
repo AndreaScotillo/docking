@@ -2,18 +2,103 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
+import pytest
 from gi.repository import GLib
 
+from docking.platform.status_notifier import backend
 from docking.platform.status_notifier.backend import (
     RegisteredItemAddress,
+    StatusNotifierBackend,
     TrayItem,
     _argb_to_rgba,
     _best_icon_pixmap,
     _bytes_from_dbus_array,
     _tooltip_parts,
     _unpack_variant,
+    parse_registered_item,
     tray_item_from_properties,
 )
+
+
+class TestWatcherIdentifiers:
+    @pytest.mark.parametrize("service", [":1.74", "org.example.Tray"])
+    def test_gnome_identifier(self, service):
+        assert parse_registered_item(
+            f"{service}@/org/ayatana/NotificationItem/remmina_icon"
+        ) == RegisteredItemAddress(
+            service=service, path="/org/ayatana/NotificationItem/remmina_icon"
+        )
+
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            ":1.74@@/Tray",
+            "invalid/Tray",
+            ":1.74@/bad-path",
+            ":1.74/Tray//Icon",
+            "org.example.Tray@",
+            "@/Tray",
+        ],
+    )
+    def test_invalid_address_is_rejected(self, identifier):
+        assert parse_registered_item(identifier) is None
+
+    def test_invalid_sender_is_rejected(self):
+        assert parse_registered_item("/Tray", default_service=":1.74@") is None
+
+
+class TestItemReadFailures:
+    @pytest.mark.parametrize("reply", [None, (), ({}, {}), ("invalid",)])
+    def test_missing_or_malformed_reply_is_skipped(self, reply):
+        bus = Mock()
+        bus.call_sync.return_value = reply
+        assert (
+            backend._read_item(
+                bus=bus,
+                address=RegisteredItemAddress(service=":1.74", path="/Tray"),
+            )
+            is None
+        )
+
+    def test_invalid_address_never_reaches_gio(self):
+        bus = Mock()
+        assert (
+            backend._read_item(
+                bus=bus,
+                address=RegisteredItemAddress(service=":1.74@", path="/Tray"),
+            )
+            is None
+        )
+        bus.call_sync.assert_not_called()
+
+    def test_poll_keeps_good_items_after_failed_reads(self, monkeypatch):
+        bus = Mock()
+        bus.call_sync.side_effect = [
+            None,
+            ({"IconPixmap": [(1, 1, ["invalid byte"])]},),
+            GLib.Variant("(a{sv})", ({"Title": GLib.Variant("s", "Healthy")},)),
+        ]
+        client = StatusNotifierBackend()
+        monkeypatch.setattr(client, "_connection", lambda: bus)
+        monkeypatch.setattr(backend, "_name_has_owner", lambda **kwargs: True)
+        monkeypatch.setattr(
+            client, "_register_with_existing_watcher", lambda **kw: None
+        )
+        monkeypatch.setattr(
+            client,
+            "_existing_watcher_addresses",
+            lambda **kw: [
+                RegisteredItemAddress(service=f":1.{number}", path="/Tray")
+                for number in (74, 75, 76)
+            ],
+        )
+        state = client.get_state()
+        assert state.available
+        assert [item.title for item in state.items] == ["Healthy"]
+        assert state.items[0].service == ":1.76"
+        assert bus.call_sync.call_count == 3
 
 
 class TestTooltipParts:
