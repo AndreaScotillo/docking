@@ -35,6 +35,7 @@ from docking.log import get_logger, with_context
 from docking.platform.environment import is_flatpak, xdg_data_home
 
 from .constants import DESKTOP_SUFFIX, FALLBACK_ICON
+from .flatpak import flatpak_app_id_from_exec
 
 DEFAULT_XDG_DATA_DIRS = "/usr/local/share:/usr/share"
 SNAP_XDG_DATA_DIR = "/var/lib/snapd/desktop"
@@ -145,6 +146,9 @@ def match_aliases(
         wm_class.lower(),
         desktop_id.removesuffix(DESKTOP_SUFFIX).lower(),
     ]
+    flatpak_id = flatpak_app_id_from_exec(exec_line)
+    if flatpak_id:
+        aliases.append(flatpak_id.lower())
     wine_aliases = wine_executable_aliases(exec_line)
     if wine_aliases:
         aliases.extend(wine_aliases)

@@ -177,7 +177,9 @@ from docking.platform.backends.base import (
     WindowSnapshot,
 )
 from docking.platform.backends.diagnostics import (
+    IdentityHintStatus,
     WindowDiagnostic,
+    WindowIdentityHint,
     WindowReason,
     WindowTrackingDiagnostic,
     with_match,
@@ -231,57 +233,53 @@ class WindowMatcher:
         """Refresh pinned/transient alias hints from current dock items."""
         self._app_matcher.sync_visible_items(items)
 
-    def match_result(self, window: Wnck.Window) -> ApplicationMatch | None:
-        """Return structured identity, including runtime-only app metadata."""
+    def match_result(
+        self,
+        window: Wnck.Window,
+        *,
+        identity_hints: tuple[WindowIdentityHint, ...] = (),
+    ) -> ApplicationMatch | None:
+        """Match explicit application identities before WM_CLASS heuristics."""
         self._identity_read_errors = []
         class_group = self._class_group_for(window=window)
-        if not class_group:
-            if not self._identity_read_errors:
-                instance = self._class_instance_for(window=window)
-                attempt = self._app_matcher.match_attempt(
-                    "", process_id=self._pid_for(window=window)
-                )
-                self.last_diagnostic = WindowDiagnostic(
-                    identities=(
-                        ("wm-class", ""),
-                        ("wm-class-instance", instance or ""),
-                    ),
-                    pid=attempt.pid,
-                    executable_path=(
-                        str(attempt.executable_path)
-                        if attempt.executable_path
-                        else None
-                    ),
-                    reason=WindowReason.EMPTY_CLASS,
-                    read_errors=tuple(self._identity_read_errors),
-                )
-                return None
-            self.last_diagnostic = WindowDiagnostic(
-                outcome="error",
-                reason=WindowReason.CLASS_READ_FAILED,
-                read_errors=tuple(self._identity_read_errors),
-            )
-            return None
         class_instance = self._class_instance_for(window=window)
+        application_ids = tuple(
+            hint.value
+            for hint in identity_hints
+            if hint.status is IdentityHintStatus.PRESENT and hint.value
+        )
         attempt = self._app_matcher.match_attempt(
-            app_id=class_group,
+            app_id=class_group or "",
             instance_hint=class_instance,
             prefer_raw_app_id=False,
             defer_wm_class_lookup=True,
             process_id=self._pid_for(window=window),
+            application_ids=application_ids,
+        )
+        class_failed = "wm-class" in self._identity_read_errors
+        reason = (
+            WindowReason.CLASS_READ_FAILED
+            if class_failed
+            else WindowReason.EMPTY_CLASS
+            if not class_group
+            else WindowReason.NO_MATCH
         )
         self.last_diagnostic = with_match(
             WindowDiagnostic(
                 identities=(
-                    ("wm-class", class_group),
+                    ("wm-class", class_group or ""),
                     ("wm-class-instance", class_instance or ""),
                 ),
                 pid=attempt.pid,
-                executable_path=(
-                    str(attempt.executable_path) if attempt.executable_path else None
-                ),
-                reason=WindowReason.NO_MATCH,
+                executable_path=str(attempt.executable_path)
+                if attempt.executable_path
+                else None,
+                sandbox_app_id=attempt.sandbox_app_id,
+                script_basename=attempt.script_basename,
+                outcome="error" if class_failed else "unmatched",
+                reason=reason,
                 read_errors=tuple(self._identity_read_errors),
+                identity_hints=identity_hints,
             ),
             attempt.match,
         )
@@ -501,18 +499,17 @@ class WindowTracker:
                     )
                 )
                 continue
-            match = self._matcher.match_result(window=window)
+            try:
+                hints = self._identity_hint_reader.read(int(window.get_xid()))
+            except _GEOMETRY_ERRORS:
+                hints = ()
+            match = self._matcher.match_result(window=window, identity_hints=hints)
             record = replace(
                 self._matcher.last_diagnostic,
                 window_id=self._diagnostic_record(window).window_id,
                 workspace=self._diagnostic_workspace(window),
             )
             if match is None:
-                try:
-                    hints = self._identity_hint_reader.read(int(window.get_xid()))
-                except _GEOMETRY_ERRORS:
-                    hints = ()
-                record = replace(record, identity_hints=hints)
                 records.append(record)
                 continue
             desktop_id = match.desktop_id

@@ -181,10 +181,10 @@ def test_diagnostics_capture_real_matching_without_changing_running_state(tracke
     rows = {row.window_id: row for row in snapshot.windows}
     assert snapshot.registry_generation == registry.generation
     assert snapshot.application_discovery.generation == registry.generation
-    assert rows["x11:1"].identity_hints == ()
+    assert rows["x11:1"].identity_hints == (hint,)
     assert rows["x11:2"].identity_hints == (hint,)
     assert rows["x11:3"].identity_hints == (hint,)
-    assert tracker._identity_hint_reader.read.call_count == 2
+    assert tracker._identity_hint_reader.read.call_count == 3
     assert rows["x11:1"].outcome == "matched"
     assert rows["x11:1"].desktop_id == "firefox.desktop"
     assert rows["x11:1"].match_method == "visible-alias"
@@ -502,7 +502,7 @@ class TestWindowTrackerRunningAggregation:
 
         mapping = {w1: "firefox.desktop", w2: "firefox.desktop", w3: "code.desktop"}
         tracker._matcher.match_result = MagicMock(
-            side_effect=lambda window: (
+            side_effect=lambda window, identity_hints: (
                 _match(mapping[window]) if window in mapping else None
             )
         )
@@ -586,7 +586,7 @@ class TestWindowTrackerRunningAggregation:
             active_workspace=active_workspace,
         )
         tracker._matcher.match_result = MagicMock(
-            side_effect=lambda window: (
+            side_effect=lambda window, identity_hints: (
                 _match("firefox.desktop") if window in {current, other} else None
             )
         )
@@ -687,7 +687,7 @@ class TestWindowTrackerRunningAggregation:
         good = FakeWindow(10, class_group="Firefox")
         tracker._screen = FakeScreen(windows=[BrokenWindow(), good], active_window=good)
         tracker._matcher.match_result = MagicMock(
-            side_effect=lambda window: (
+            side_effect=lambda window, identity_hints: (
                 _match("firefox.desktop") if window is good else None
             )
         )

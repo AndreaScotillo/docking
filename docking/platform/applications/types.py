@@ -55,6 +55,7 @@ class ApplicationInfo:
     aliases: tuple[str, ...]
     visible: bool
     has_gio_source: bool
+    flatpak_app_id: str = ""
     generic_name: str = ""
     description: str = ""
     categories: tuple[str, ...] = ()
@@ -97,6 +98,7 @@ class ApplicationDiagnostic:
     aliases: tuple[str, ...]
     gio_startup_wm_class: str | None = None
     file_startup_wm_class: str | None = None
+    flatpak_app_id: str = ""
 
 
 class DiscoveryReason(Enum):
@@ -161,6 +163,9 @@ class MatchMethod(Enum):
     DESKTOP_ID = "desktop-id"
     WM_CLASS = "wm-class"
     RUNTIME_PATH_SPLIT = "runtime-path-split"
+    APPLICATION_ID = "application-id"
+    SANDBOX_ID = "sandbox-id"
+    SCRIPT_NAME = "script-name"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -208,6 +213,8 @@ class ApplicationMatchAttempt:
     pid: int | None = None
     executable_path: Path | None = None
     failure_reason: MatchFailureReason | None = None
+    sandbox_app_id: str | None = None
+    script_basename: str | None = None
 
 
 __all__ = [

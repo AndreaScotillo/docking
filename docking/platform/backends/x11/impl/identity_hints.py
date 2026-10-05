@@ -1,4 +1,4 @@
-"""Bounded, diagnostic-only reads of X11 application identity properties."""
+"""Bounded, read-only reads of X11 application identity properties."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class X11IdentityHintReader:
             try:
                 hint = self._read_property(connection, xid, name)
             except Exception:
-                # Extra evidence must never abort a real tracking scan.
+                # Unavailable identity hints must never abort a tracking scan.
                 hint = WindowIdentityHint(name, IdentityHintStatus.READ_ERROR)
             hints.append(hint)
         return tuple(hints)

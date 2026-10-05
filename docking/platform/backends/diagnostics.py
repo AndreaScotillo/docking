@@ -72,6 +72,8 @@ class WindowDiagnostic:
     aliases: tuple[str, ...] = ()
     read_errors: tuple[str, ...] = ()
     identity_hints: tuple[WindowIdentityHint, ...] = ()
+    sandbox_app_id: str | None = None
+    script_basename: str | None = None
 
 
 @dataclass(frozen=True)

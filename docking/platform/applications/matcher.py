@@ -276,6 +276,7 @@ class AppIdMatcher:
         prefer_raw_app_id: bool = True,
         defer_wm_class_lookup: bool = False,
         process_id: int | None = None,
+        application_ids: tuple[str, ...] = (),
     ) -> ApplicationMatch | None:
         """Return the selected ID, canonical metadata, and exact evidence route."""
         return self.match_attempt(
@@ -284,6 +285,7 @@ class AppIdMatcher:
             prefer_raw_app_id=prefer_raw_app_id,
             defer_wm_class_lookup=defer_wm_class_lookup,
             process_id=process_id,
+            application_ids=application_ids,
         ).match
 
     def match_attempt(
@@ -294,6 +296,7 @@ class AppIdMatcher:
         prefer_raw_app_id: bool = True,
         defer_wm_class_lookup: bool = False,
         process_id: int | None = None,
+        application_ids: tuple[str, ...] = (),
     ) -> ApplicationMatchAttempt:
         """Keep process evidence even when the existing matching decision fails."""
         self._sync_registry_generation()
@@ -305,11 +308,14 @@ class AppIdMatcher:
             defer_wm_class_lookup=defer_wm_class_lookup,
             process_id=process_id,
             process=process,
+            application_ids=application_ids,
         )
         return ApplicationMatchAttempt(
             match=match,
             pid=process.pid if process is not None else _evidence_pid(process_id),
             executable_path=process.executable_path if process is not None else None,
+            sandbox_app_id=process.sandbox_app_id if process is not None else None,
+            script_basename=process.script_basename if process is not None else None,
             failure_reason=(
                 None
                 if match is not None
@@ -328,11 +334,10 @@ class AppIdMatcher:
         defer_wm_class_lookup: bool,
         process_id: int | None,
         process: ProcessIdentity | None,
+        application_ids: tuple[str, ...],
     ) -> ApplicationMatch | None:
         raw_app_id = app_id
         app_id = app_id.strip()
-        if not app_id:
-            return None
         app_id_lower = app_id.lower().strip()
 
         if process is not None and process.launch is not None:
@@ -346,6 +351,29 @@ class AppIdMatcher:
                 process=process,
                 process_id=process_id,
             )
+
+        for identity in application_ids:
+            result = self._match_known_application_id(
+                identity,
+                method=MatchMethod.APPLICATION_ID,
+                process=process,
+                process_id=process_id,
+                instance_hint=instance_hint,
+            )
+            if result is not None:
+                return result
+        if process is not None and process.sandbox_app_id:
+            result = self._match_known_application_id(
+                process.sandbox_app_id,
+                method=MatchMethod.SANDBOX_ID,
+                process=process,
+                process_id=process_id,
+                instance_hint=instance_hint,
+            )
+            if result is not None:
+                return result
+        if not app_id:
+            return None
 
         if instance_hint:
             result = self._match_wine_instance(
@@ -459,7 +487,89 @@ class AppIdMatcher:
                 )
                 if result is not None:
                     return result
-        return None
+        return self._match_python_script(
+            app_id,
+            process=process,
+            process_id=process_id,
+            instance_hint=instance_hint,
+        )
+
+    def _match_known_application_id(
+        self,
+        identity: str,
+        *,
+        method: MatchMethod,
+        process: ProcessIdentity | None,
+        process_id: int | None,
+        instance_hint: str | None,
+    ) -> ApplicationMatch | None:
+        identity = identity.strip()
+        if not identity or "/" in identity or any(char.isspace() for char in identity):
+            return None
+        # Application IDs may themselves end in '.desktop' (e.g. Telegram).
+        for desktop_id in dict.fromkeys((f"{identity}{DESKTOP_SUFFIX}", identity)):
+            application = self._registry.get(desktop_id)
+            if application is not None:
+                return self._application_match(
+                    desktop_id=application.desktop_id,
+                    application=application,
+                    method=method,
+                    raw_app_id=identity,
+                    instance_hint=instance_hint,
+                    process=process,
+                    process_id=process_id,
+                )
+        candidates = tuple(
+            app
+            for app in self._registry.resolve_all_by_wm_class(identity)
+            if app.desktop_id.removesuffix(DESKTOP_SUFFIX).lower() == identity.lower()
+            or app.flatpak_app_id.lower() == identity.lower()
+        )
+        if len(candidates) != 1:
+            return None
+        application = candidates[0]
+        return self._application_match(
+            desktop_id=application.desktop_id,
+            application=application,
+            method=method,
+            raw_app_id=identity,
+            instance_hint=instance_hint,
+            process=process,
+            process_id=process_id,
+        )
+
+    def _match_python_script(
+        self,
+        app_id: str,
+        *,
+        process: ProcessIdentity | None,
+        process_id: int | None,
+        instance_hint: str | None,
+    ) -> ApplicationMatch | None:
+        if process is None or not process.script_basename:
+            return None
+        script = process.script_basename
+        if script.lower() != app_id.lower() or not script.endswith(".py"):
+            return None
+        stem = script[:-3]
+        candidates = self._registry.resolve_all_by_wm_class(stem)
+        if len(candidates) != 1:
+            return None
+        application = candidates[0]
+        if (
+            desktop_entries.normalized_exec_basename(application.exec_line)
+            != stem.lower()
+        ):
+            return None
+        return self._application_match(
+            desktop_id=application.desktop_id,
+            application=application,
+            method=MatchMethod.SCRIPT_NAME,
+            raw_app_id=script,
+            instance_hint=instance_hint,
+            process=process,
+            process_id=process_id,
+        )
 
     def _sync_registry_generation(self) -> None:
         generation = self._registry.generation

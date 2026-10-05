@@ -17,6 +17,7 @@ from gi.repository import Gio
 from docking.log import get_logger, with_context
 
 from . import entries as desktop_entries
+from .flatpak import flatpak_app_id_from_exec
 from .types import (
     ActionSource,
     ApplicationAction,
@@ -633,6 +634,7 @@ def _application_diagnostic(
         aliases=application.aliases,
         gio_startup_wm_class=gio_startup_wm_class,
         file_startup_wm_class=facts.startup_wm_class if facts else None,
+        flatpak_app_id=application.flatpak_app_id,
     )
 
 
@@ -754,6 +756,7 @@ def _make_application(
         aliases=tuple(desktop_entries.match_aliases(desktop_id, wm_class, exec_line)),
         visible=visible,
         has_gio_source=has_gio_source,
+        flatpak_app_id=flatpak_app_id_from_exec(exec_line),
         generic_name=generic_name,
         description=description,
         categories=_normalise_values(categories_raw),
