@@ -10,6 +10,7 @@ from docking.platform.backends.diagnostics import IdentityHintStatus
 from docking.platform.backends.x11.impl.identity_hints import (
     IDENTITY_PROPERTIES,
     X11IdentityHintReader,
+    _X11Connection,
 )
 
 
@@ -55,16 +56,16 @@ def _reader(
         )
         return status
 
-    reader._xlib = SimpleNamespace(
+    xlib = SimpleNamespace(
         XInternAtom=MagicMock(side_effect=lambda _d, name, _only: atoms[name.decode()]),
         XGetWindowProperty=MagicMock(side_effect=read),
         XFree=MagicMock(),
     )
-    reader._xdisplay = ctypes.c_void_p(1)
-    reader._display = SimpleNamespace(
+    display = SimpleNamespace(
         error_trap_push=MagicMock(),
         error_trap_pop=MagicMock(return_value=x_error),
     )
+    reader._connection = _X11Connection(xlib, display, ctypes.c_void_p(1))
     return reader
 
 
@@ -82,11 +83,11 @@ def test_valid_identity_strings_are_read_and_freed(raw, actual_type, value):
     hints = reader.read(42)
     assert all(hint.status is IdentityHintStatus.PRESENT for hint in hints)
     assert all(hint.value == value for hint in hints)
-    assert reader._xlib.XFree.call_count == 2
-    assert reader._display.error_trap_pop.call_count == 2
-    atom_calls = reader._xlib.XInternAtom.call_count
+    assert reader._connection.xlib.XFree.call_count == 2
+    assert reader._connection.display.error_trap_pop.call_count == 2
+    atom_calls = reader._connection.xlib.XInternAtom.call_count
     reader.read(42)
-    assert reader._xlib.XInternAtom.call_count == atom_calls
+    assert reader._connection.xlib.XInternAtom.call_count == atom_calls
 
 
 @pytest.mark.parametrize(
@@ -107,24 +108,24 @@ def test_invalid_or_disappearing_properties_are_isolated_and_freed(kwargs, expec
     reader = _reader(**kwargs)
     hints = reader.read(42)
     assert all(hint.status is expected and not hint.value for hint in hints)
-    assert reader._xlib.XFree.call_count == 2
-    assert reader._display.error_trap_pop.call_count == 2
+    assert reader._connection.xlib.XFree.call_count == 2
+    assert reader._connection.display.error_trap_pop.call_count == 2
 
 
 def test_missing_atoms_are_not_cached_or_read():
     reader = _reader()
-    reader._xlib.XInternAtom.side_effect = None
-    reader._xlib.XInternAtom.return_value = 0
+    reader._connection.xlib.XInternAtom.side_effect = None
+    reader._connection.xlib.XInternAtom.return_value = 0
     assert all(hint.status is IdentityHintStatus.ABSENT for hint in reader.read(42))
-    reader._xlib.XGetWindowProperty.assert_not_called()
-    reader._xlib.XFree.assert_not_called()
+    reader._connection.xlib.XGetWindowProperty.assert_not_called()
+    reader._connection.xlib.XFree.assert_not_called()
     reader.read(42)
-    assert reader._xlib.XInternAtom.call_count == 4
+    assert reader._connection.xlib.XInternAtom.call_count == 4
 
 
 def test_unavailable_display_does_not_read_properties(monkeypatch):
     reader = X11IdentityHintReader()
-    monkeypatch.setattr(reader, "_initialize", lambda: False)
+    monkeypatch.setattr(reader, "_initialize", lambda: None)
     assert all(
         hint.status is IdentityHintStatus.UNAVAILABLE for hint in reader.read(42)
     )
@@ -132,6 +133,6 @@ def test_unavailable_display_does_not_read_properties(monkeypatch):
 
 def test_unexpected_binding_failure_does_not_abort_capture():
     reader = _reader()
-    reader._xlib.XGetWindowProperty.side_effect = RuntimeError("PRIVATE")
+    reader._connection.xlib.XGetWindowProperty.side_effect = RuntimeError("PRIVATE")
     assert all(hint.status is IdentityHintStatus.READ_ERROR for hint in reader.read(42))
-    assert reader._display.error_trap_pop.call_count == 2
+    assert reader._connection.display.error_trap_pop.call_count == 2

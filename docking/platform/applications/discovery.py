@@ -48,6 +48,12 @@ class DiscoveryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class _DiscoveredApplication:
+    application: ApplicationInfo
+    diagnostic: ApplicationDiagnostic
+
+
+@dataclass(frozen=True, slots=True)
 class _FileAction:
     action_id: str
     name: str
@@ -189,20 +195,22 @@ def discover(
                 path=path,
                 facts=facts,
             )
-            diagnostic = _application_diagnostic(application, None, facts)
+            result = _DiscoveredApplication(
+                application, _application_diagnostic(application, None, facts)
+            )
         else:
-            application, diagnostic = _application_from_gio_with_diagnostic(
+            result = _application_from_gio_with_diagnostic(
                 desktop_id=application_id,
                 app_info=app_info,
                 fallback_path=path,
                 fallback_facts=facts,
             )
-            if application is not None:
+            if result is not None:
                 handles[application_id] = app_info
-        if application is not None:
+        if result is not None:
+            application = result.application
             applications.append(application)
-            assert diagnostic is not None
-            diagnostics.append(diagnostic)
+            diagnostics.append(result.diagnostic)
             if (
                 application.desktop_file is not None
                 and application.desktop_file != path
@@ -223,18 +231,17 @@ def discover(
         if application_id in consumed_gio_ids or application_id in file_winners:
             continue
         app_info = gio_by_id[application_id]
-        application, diagnostic = _application_from_gio_with_diagnostic(
+        result = _application_from_gio_with_diagnostic(
             desktop_id=application_id,
             app_info=app_info,
             fallback_path=None,
             fallback_facts=None,
         )
-        if application is None:
+        if result is None:
             decisions.append(_rejected_gio_decision(app_info))
             continue
-        applications.append(application)
-        assert diagnostic is not None
-        diagnostics.append(diagnostic)
+        applications.append(result.application)
+        diagnostics.append(result.diagnostic)
         handles[application_id] = app_info
 
     return DiscoveryResult(
@@ -380,13 +387,13 @@ def application_from_gio(
     fallback_path: Path | None,
     fallback_facts: _FileFacts | None,
 ) -> ApplicationInfo | None:
-    application, _diagnostic = _application_from_gio_with_diagnostic(
+    result = _application_from_gio_with_diagnostic(
         desktop_id=desktop_id,
         app_info=app_info,
         fallback_path=fallback_path,
         fallback_facts=fallback_facts,
     )
-    return application
+    return result.application if result is not None else None
 
 
 def _application_from_gio_with_diagnostic(
@@ -395,9 +402,9 @@ def _application_from_gio_with_diagnostic(
     app_info: object,
     fallback_path: Path | None,
     fallback_facts: _FileFacts | None,
-) -> tuple[ApplicationInfo | None, ApplicationDiagnostic | None]:
+) -> _DiscoveredApplication | None:
     if _safe_bool_call(app_info, "get_is_hidden"):
-        return None, None
+        return None
 
     filename = desktop_filename(app_info)
     desktop_file = Path(filename).expanduser() if filename else fallback_path
@@ -406,7 +413,7 @@ def _application_from_gio_with_diagnostic(
     if desktop_file is not None and desktop_file != fallback_path:
         facts = file_facts(desktop_file)
     if facts is not None and (not facts.is_application or facts.hidden):
-        return None, None
+        return None
 
     exec_line = source_text(safe_call(app_info, "get_commandline"))
     startup_wm_class = source_text(safe_call(app_info, "get_startup_wm_class"))
@@ -458,7 +465,9 @@ def _application_from_gio_with_diagnostic(
             facts.actions if facts is not None else (),
         ),
     )
-    return application, _application_diagnostic(application, startup_wm_class, facts)
+    return _DiscoveredApplication(
+        application, _application_diagnostic(application, startup_wm_class, facts)
+    )
 
 
 def safe_call(
