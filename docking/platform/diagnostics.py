@@ -423,6 +423,8 @@ def _application_diagnostic_lines(snapshot: DiagnosticsSnapshot) -> list[str]:
             ("Matched identity", row.matched_identity),
             ("Desktop file", row.desktop_file),
             ("Launcher executable basename", row.launcher_basename),
+            ("Process sandbox application ID", row.sandbox_app_id),
+            ("Process Python script basename", row.script_basename),
         ):
             lines.append(f"- {label}: {_report_value(value)}")
         lines.append(f"- Registered aliases: {_report_value(', '.join(row.aliases))}")
@@ -466,6 +468,7 @@ def _application_inventory_report(
             ("Effective matching class", app.wm_class),
             ("Launcher executable basename", app.launcher_basename),
             ("Registered aliases", ", ".join(app.aliases)),
+            ("Flatpak application ID", app.flatpak_app_id),
         ):
             lines.append(f"- {label}: {_report_value(value)}")
         lines.append(

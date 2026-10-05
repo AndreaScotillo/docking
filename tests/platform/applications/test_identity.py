@@ -93,6 +93,92 @@ def test_identity_reads_current_process_executable():
     assert identity.executable_path == Path("/proc/self/exe").resolve()
 
 
+def test_process_metadata_survives_unavailable_executable(tmp_path):
+    process = tmp_path / "42"
+    (process / "root").mkdir(parents=True)
+    (process / "root" / ".flatpak-info").write_text(
+        "[Application]\nname=app.grayjay.Grayjay\n[Instance]\ninstance-id=123\n"
+    )
+    (process / "cmdline").write_bytes(
+        b"/usr/bin/python3.13\0/usr/share/gufw/gufw.py\0PRIVATE_ARGUMENT\0"
+    )
+    service = ProcessIdentityService(
+        LaunchProvenanceStore(),
+        proc_root=tmp_path,
+        executable_resolver=lambda _pid: None,
+    )
+    result = service.identity_for_pid(42)
+    assert result.executable_path is None
+    assert result.sandbox_app_id == "app.grayjay.Grayjay"
+    assert result.script_basename == "gufw.py"
+    assert "PRIVATE_ARGUMENT" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        b"bad",
+        b"\xff",
+        b"[Runtime]\nname=org.gnome.Platform\n",
+        b"[Application]\nname=not-an-id\n",
+        b"[Application]\nname=../../app\n",
+        b"[Application]\nname=org.example.App\nname=other\n",
+        b"x" * 65537,
+    ],
+)
+def test_invalid_flatpak_process_metadata_does_not_create_identity(tmp_path, metadata):
+    root = tmp_path / "42" / "root"
+    root.mkdir(parents=True)
+    (root / ".flatpak-info").write_bytes(metadata)
+    service = ProcessIdentityService(
+        LaunchProvenanceStore(),
+        proc_root=tmp_path,
+        executable_resolver=lambda _pid: None,
+    )
+    assert service.identity_for_pid(42).sandbox_app_id is None
+
+
+@pytest.mark.parametrize(
+    "cmdline",
+    [
+        b"/usr/bin/python3\0-m\0gufw.py\0",
+        b"/usr/bin/python3\0-c\0gufw.py\0",
+        b"/usr/bin/bash\0gufw.py\0",
+        b"/usr/bin/python3\0gufw\0",
+        b"\xff",
+        b"x" * 4097,
+    ],
+)
+def test_script_metadata_rejects_unconfirmed_script_names(tmp_path, cmdline):
+    process = tmp_path / "42"
+    process.mkdir()
+    (process / "cmdline").write_bytes(cmdline)
+    service = ProcessIdentityService(
+        LaunchProvenanceStore(),
+        proc_root=tmp_path,
+        executable_resolver=lambda _pid: None,
+    )
+    assert service.identity_for_pid(42).script_basename is None
+
+
+def test_process_metadata_failure_is_optional(tmp_path, monkeypatch):
+    original = Path.open
+
+    def open_path(path, *args, **kwargs):
+        if path.is_relative_to(tmp_path):
+            raise PermissionError("PRIVATE")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_path)
+    service = ProcessIdentityService(
+        LaunchProvenanceStore(),
+        proc_root=tmp_path,
+        executable_resolver=lambda _pid: None,
+    )
+    identity = service.identity_for_pid(42)
+    assert identity.sandbox_app_id is None and identity.script_basename is None
+
+
 def test_store_is_bounded_and_live_reads_refresh_order():
     store = LaunchProvenanceStore(max_records=2)
     for pid in (1, 2):
