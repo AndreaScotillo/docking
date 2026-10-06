@@ -265,6 +265,7 @@ class SettingsWindowController:
         self._launcher_badges_switch: Any = None
         self._launcher_progress_switch: Any = None
         self._previews_switch: Any = None
+        self._preview_thumbnail_outline_switch: Any = None
         self._tooltips_switch: Any = None
         self._lock_icons_switch: Any = None
         self._workspace_only_switch: Any = None
@@ -427,6 +428,7 @@ class SettingsWindowController:
             self._window_list_sort_combo.append(sort_value, sort_label)
 
         self._previews_switch = self._new_switch()
+        self._preview_thumbnail_outline_switch = self._new_switch()
         self._tooltips_switch = self._new_switch()
         self._window_count_numbers_switch = self._new_switch()
         self._launcher_badges_switch = self._new_switch()
@@ -652,6 +654,11 @@ class SettingsWindowController:
                     _("Window Previews"),
                     self._previews_switch,
                     _("Show window thumbnails when hovering over running apps."),
+                ),
+                (
+                    _("Outline Thumbnail on Hover"),
+                    self._preview_thumbnail_outline_switch,
+                    _("Highlight the thumbnail under the pointer in the preview."),
                 ),
                 (
                     _("Show Window Counts"),
@@ -1206,6 +1213,10 @@ class SettingsWindowController:
                 widget=self._previews_switch,
             ),
             self._register_switch_binding(
+                config_attr="preview_thumbnail_outline",
+                widget=self._preview_thumbnail_outline_switch,
+            ),
+            self._register_switch_binding(
                 config_attr="tooltips_enabled",
                 widget=self._tooltips_switch,
                 on_change=self._after_tooltips_changed,
@@ -1751,6 +1762,10 @@ class SettingsWindowController:
         self._actions.reposition()
 
     def _update_dependent_sensitivity(self) -> None:
+        if self._preview_thumbnail_outline_switch is not None:
+            self._preview_thumbnail_outline_switch.set_sensitive(
+                bool(self._config.previews_enabled)
+            )
         if self._zoom_percent_spin is not None:
             self._zoom_percent_spin.set_sensitive(bool(self._config.zoom_enabled))
         if self._monitor_combo is not None:
