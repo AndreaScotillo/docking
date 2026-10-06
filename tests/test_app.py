@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import runpy
 import signal
 import sys
@@ -34,7 +35,12 @@ def _load_app_module(monkeypatch, *, vendor_exists: bool = False):
         idle_add=MagicMock(),
         timeout_add_seconds=MagicMock(return_value=77),
     )
-    fake_gtk = SimpleNamespace(main=MagicMock(), main_quit=MagicMock())
+
+    fake_gtk = SimpleNamespace(
+        main=MagicMock(),
+        main_quit=MagicMock(),
+        init_check=MagicMock(),
+    )
     fake_repo = SimpleNamespace(GLib=fake_glib, Gtk=fake_gtk)
     fake_gi = SimpleNamespace(require_version=MagicMock(), repository=fake_repo)
 
@@ -173,6 +179,12 @@ def _load_app_module(monkeypatch, *, vendor_exists: bool = False):
 
 
 class TestAppImport:
+    def test_display_setup_is_owned_by_the_platform_launcher(self, monkeypatch):
+        monkeypatch.delenv("GDK_BACKEND", raising=False)
+        _mod, _glib, gtk = _load_app_module(monkeypatch)
+        gtk.init_check.assert_not_called()
+        assert "GDK_BACKEND" not in os.environ
+
     def test_import_inserts_vendor_path_when_present(self, monkeypatch):
         # Given
         vendor_dir = "/usr/lib/docking/vendor"
