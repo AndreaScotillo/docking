@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from docking.core.config import Config
 from docking.core.position import Position
 from docking.platform.backends.base import Rect, WindowId, WindowSnapshot
 
@@ -438,6 +439,16 @@ class TestPreviewPopupIntegration:
 
     def test_thumb_enter_never_sets_prelight_when_thumbnail_outline_disabled(self):
         popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: False
+        widget = MagicMock()
+
+        preview_mod.PreviewPopup._on_thumb_enter(popup, widget, MagicMock())
+
+        widget.set_state_flags.assert_not_called()
+
+    def test_thumb_enter_does_not_set_prelight_with_default_config(self):
+        popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: Config().preview_thumbnail_outline
         widget = MagicMock()
 
         preview_mod.PreviewPopup._on_thumb_enter(popup, widget, MagicMock())
