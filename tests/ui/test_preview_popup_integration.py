@@ -14,6 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from docking.core.config import Config
 from docking.core.position import Position
 from docking.platform.backends.base import Rect, WindowId, WindowSnapshot
@@ -657,6 +659,35 @@ class TestPreviewPopupIntegration:
             )
 
         popup._outline.show_around.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            {"visible": False},
+            {"on_current_workspace": False},
+        ],
+    )
+    def test_thumb_enter_skips_windows_that_are_not_on_screen(self, state):
+        popup = self._hover_popup()
+        window = replace(_snapshot(1), geometry=Rect(0, 0, 10, 10), **state)
+
+        preview_mod.PreviewPopup._on_thumb_enter(
+            popup, MagicMock(), MagicMock(), window
+        )
+
+        popup._outline.show_around.assert_not_called()
+
+    def test_thumb_enter_outlines_when_visibility_is_unknown_or_true(self):
+        popup = self._hover_popup()
+        geometry = Rect(0, 0, 10, 10)
+
+        for state in ({}, {"visible": True, "on_current_workspace": True}):
+            window = replace(_snapshot(1), geometry=geometry, **state)
+            preview_mod.PreviewPopup._on_thumb_enter(
+                popup, MagicMock(), MagicMock(), window
+            )
+
+        assert popup._outline.show_around.call_count == 2
 
     def test_thumb_enter_without_overlay_is_a_noop(self):
         popup = _make_popup()

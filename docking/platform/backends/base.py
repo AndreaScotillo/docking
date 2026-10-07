@@ -405,6 +405,26 @@ class SurfaceService(Service):
         """
         return None
 
+    @property
+    def overlay_uses_toplevel(self) -> bool:
+        """True when overlay windows must be ``Gtk.WindowType.TOPLEVEL``.
+
+        X11 overlays are override-redirect popups placed with ``move()``.
+        Layer-shell needs a toplevel to assign its surface role to.
+        """
+        return False
+
+    def prepare_overlay_window(self, window: object) -> None:
+        """Give a transient overlay window its platform role before realize."""
+
+    def place_overlay(self, window: object, rect: Rect) -> None:
+        """Place a prepared overlay window at ``rect`` in global coordinates.
+
+        The default suits backends where ``Gtk.Window.move()`` takes absolute
+        coordinates; compositor-positioned backends override it.
+        """
+        window.move(rect.x, rect.y)
+
     def external_workarea(self, monitor: MonitorSnapshot) -> Rect | None:
         """Return monitor space excluding other edge-reserving surfaces.
 

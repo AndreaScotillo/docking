@@ -734,7 +734,7 @@ class SettingsWindowController:
                     else _(
                         "Outline the real window on the desktop while hovering "
                         "its thumbnail. Not available in this session; "
-                        "requires X11."
+                        "requires X11 or Sway."
                     ),
                 ),
                 (

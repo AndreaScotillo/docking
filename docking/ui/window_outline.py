@@ -11,10 +11,11 @@
 """Click-through outline drawn around a foreign window on the desktop.
 
 The preview popup uses this to show which real window a thumbnail stands for.
-The overlay is a borderless, transparent popup sized to the target's geometry
+The overlay is a borderless, transparent window sized to the target's geometry
 with an empty input shape, so pointer events and focus pass straight through.
-Positioning relies on absolute coordinates, which only X11-style backends
-honor; callers gate construction on ``PlatformCapabilities.supports_window_outline``.
+Placement goes through the surface service: an override-redirect popup moved to
+absolute coordinates on X11, a layer-shell surface on compositors that have one.
+Callers gate construction on ``PlatformCapabilities.supports_window_outline``.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
-from docking.platform.backends.base import Rect
+from docking.platform.backends.base import Rect, SurfaceService
 
 OUTLINE_WIDTH_PX = 4
 OUTLINE_RGBA = (0.39, 0.71, 1.0, 0.95)
@@ -35,8 +36,12 @@ OUTLINE_RGBA = (0.39, 0.71, 1.0, 0.95)
 class WindowOutline(Gtk.Window):
     """Transparent, input-less window that strokes a rectangle border."""
 
-    def __init__(self) -> None:
-        super().__init__(type=Gtk.WindowType.POPUP)
+    def __init__(self, surface: SurfaceService | None = None) -> None:
+        self._surface = surface
+        layered = surface is not None and surface.overlay_uses_toplevel
+        super().__init__(
+            type=Gtk.WindowType.TOPLEVEL if layered else Gtk.WindowType.POPUP
+        )
         self.set_decorated(False)
         self.set_accept_focus(False)
         self.set_focus_on_map(False)
@@ -54,6 +59,8 @@ class WindowOutline(Gtk.Window):
         # widget (not the GdkWindow) so GTK reapplies it on every realize/map.
         self.input_shape_combine_region(cairo.Region([]))
         self.connect("draw", self._on_draw)
+        if surface is not None:
+            surface.prepare_overlay_window(self)
 
     def show_around(self, rect: Rect) -> None:
         """Outline ``rect`` (root coordinates); degenerate rects hide instead."""
@@ -61,7 +68,10 @@ class WindowOutline(Gtk.Window):
             self.hide()
             return
         self.resize(rect.width, rect.height)
-        self.move(rect.x, rect.y)
+        if self._surface is not None:
+            self._surface.place_overlay(self, rect)
+        else:
+            self.move(rect.x, rect.y)
         self.show()
         self.queue_draw()
 

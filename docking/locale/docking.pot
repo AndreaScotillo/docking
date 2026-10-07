@@ -5245,7 +5245,7 @@ msgstr ""
 #: docking/ui/settings.py:735
 msgid ""
 "Outline the real window on the desktop while hovering its thumbnail. Not "
-"available in this session; requires X11."
+"available in this session; requires X11 or Sway."
 msgstr ""
 
 #: docking/ui/settings.py:741

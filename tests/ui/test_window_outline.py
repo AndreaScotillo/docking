@@ -67,3 +67,54 @@ class TestWindowOutlineWidget:
             assert not outline.get_visible()
         finally:
             outline.destroy()
+
+
+class TestWindowOutlineSurfaceDelegation:
+    @staticmethod
+    def _surface(*, toplevel: bool) -> MagicMock:
+        surface = MagicMock()
+        surface.overlay_uses_toplevel = toplevel
+        return surface
+
+    def test_prepares_through_the_surface_service_before_realize(self):
+        surface = self._surface(toplevel=False)
+        outline = gtk_ui.WindowOutline(surface)
+        try:
+            surface.prepare_overlay_window.assert_called_once_with(outline)
+            assert not outline.get_realized()
+        finally:
+            outline.destroy()
+
+    def test_show_around_delegates_placement_instead_of_moving(self, monkeypatch):
+        surface = self._surface(toplevel=False)
+        outline = gtk_ui.WindowOutline(surface)
+        moves = []
+        monkeypatch.setattr(outline, "move", lambda *args: moves.append(args))
+        try:
+            outline.show_around(Rect(30, 40, 500, 400))
+            surface.place_overlay.assert_called_once_with(
+                outline, Rect(30, 40, 500, 400)
+            )
+            assert moves == []
+            assert outline.get_visible()
+        finally:
+            outline.destroy()
+
+    def test_window_type_follows_the_surface_service(self):
+        popup = gtk_ui.WindowOutline(self._surface(toplevel=False))
+        toplevel = gtk_ui.WindowOutline(self._surface(toplevel=True))
+        try:
+            assert popup.get_window_type() == gtk_ui.Gtk.WindowType.POPUP
+            assert toplevel.get_window_type() == gtk_ui.Gtk.WindowType.TOPLEVEL
+        finally:
+            popup.destroy()
+            toplevel.destroy()
+
+    def test_degenerate_rect_does_not_place(self):
+        surface = self._surface(toplevel=False)
+        outline = gtk_ui.WindowOutline(surface)
+        try:
+            outline.show_around(Rect(0, 0, 10, 0))
+            surface.place_overlay.assert_not_called()
+        finally:
+            outline.destroy()

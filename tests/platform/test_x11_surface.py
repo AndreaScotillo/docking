@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from docking.core.position import Position
 from docking.platform.backends.base import (
@@ -299,3 +299,14 @@ def test_set_blur_region_none_clears_hint(monkeypatch):
     service.set_blur_region(None)
 
     clear.assert_called_once_with(gdk_window=x11_window)
+
+
+def test_default_overlay_placement_moves_the_window_to_absolute_coordinates():
+    window = MagicMock()
+    service = X11SurfaceService()
+
+    service.prepare_overlay_window(window)
+    service.place_overlay(window, Rect(30, 40, 500, 400))
+
+    assert service.overlay_uses_toplevel is False
+    assert window.mock_calls == [call.move(30, 40)]

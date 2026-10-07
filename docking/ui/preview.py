@@ -452,6 +452,8 @@ class PreviewPopup(Gtk.Window):
             and self._outline_enabled()
             and window.geometry is not None
             and not window.minimized
+            and window.visible is not False
+            and window.on_current_workspace is not False
         ):
             self._outline.show_around(window.geometry)
             # The overlay is click-through but would still paint over the popup.
