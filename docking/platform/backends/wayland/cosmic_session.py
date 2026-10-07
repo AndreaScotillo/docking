@@ -72,6 +72,7 @@ from docking.platform.backends.wayland.toplevels import (
 if TYPE_CHECKING:
     from docking.platform.applications.identity import ProcessIdentityService
     from docking.platform.applications.registry import ApplicationRegistry
+    from docking.platform.backends.wayland.cosmic import CosmicOverlapAdapter
     from docking.platform.model import DockModel
 
 
@@ -92,9 +93,10 @@ class CosmicRuntimeServices:
 class CosmicOverlapVisibilityService(VisibilityService):
     """VisibilityService backed by COSMIC zcosmic_overlap_notify_v1."""
 
-    def __init__(self, *, overlap_adapter: object) -> None:
+    def __init__(self, *, overlap_adapter: CosmicOverlapAdapter) -> None:
         self._overlap_adapter = overlap_adapter
         self._monitors: list[CosmicOverlapMonitor] = []
+        self._layer_surface: object | None = None
 
     def start(self) -> None:
         """No global state to start; monitors start individually."""
@@ -104,6 +106,7 @@ class CosmicOverlapVisibilityService(VisibilityService):
         for monitor in tuple(self._monitors):
             monitor.stop()
         self._monitors.clear()
+        self._layer_surface = None
 
     def create_monitor(
         self,
@@ -117,7 +120,15 @@ class CosmicOverlapVisibilityService(VisibilityService):
             on_change=on_change,
         )
         self._monitors.append(monitor)
+        if self._layer_surface is not None:
+            monitor.attach_layer_surface(self._layer_surface)
         return monitor
+
+    def attach_layer_surface(self, layer_surface: object) -> None:
+        """Make the realized layer surface available to current and future monitors."""
+        self._layer_surface = layer_surface
+        for monitor in tuple(self._monitors):
+            monitor.attach_layer_surface(layer_surface)
 
 
 class CosmicOverlapMonitor(VisibilityMonitor):
@@ -126,16 +137,18 @@ class CosmicOverlapMonitor(VisibilityMonitor):
     def __init__(
         self,
         *,
-        adapter: object,
+        adapter: CosmicOverlapAdapter,
         on_change: Callable[[bool], None],
     ) -> None:
         self._adapter = adapter
         self._on_change = on_change
         self._started = False
+        self._layer_surface: object | None = None
 
     def start(self) -> None:
         """The actual subscription happens when a layer surface is available."""
         self._started = True
+        self._subscribe_if_ready()
 
     def stop(self) -> None:
         """Stop overlap monitoring."""
@@ -149,9 +162,12 @@ class CosmicOverlapMonitor(VisibilityMonitor):
 
     def attach_layer_surface(self, layer_surface: object) -> None:
         """Subscribe to overlap notifications on a layer-shell surface."""
-        if not self._started:
-            self.start()
-        self._adapter.start(layer_surface, self._on_change)
+        self._layer_surface = layer_surface
+        self._subscribe_if_ready()
+
+    def _subscribe_if_ready(self) -> None:
+        if self._started and self._layer_surface is not None:
+            self._adapter.start(self._layer_surface, self._on_change)
 
 
 class CosmicSessionBackend(SessionBackend):
@@ -175,9 +191,6 @@ class CosmicSessionBackend(SessionBackend):
 
         cosmic_toplevel = (
             runtime.cosmic_toplevel_protocol if runtime is not None else None
-        )
-        cosmic_workspace = (
-            runtime.cosmic_workspace_protocol if runtime is not None else None
         )
         cosmic_overlap = (
             runtime.cosmic_overlap_protocol if runtime is not None else None
@@ -231,24 +244,18 @@ class CosmicSessionBackend(SessionBackend):
 
                 windows = ReducedWindowService()
 
-        # Workspace service: prefer ext_workspace_manager_v1 (standard) on COSMIC
-        # since it works reliably. The COSMIC-specific zcosmic_workspace_manager_v2
-        # binding is available but the compositor's protocol structure has diverged
-        # from the XML used to generate the bindings.
-        workspaces: WorkspaceService | None = None
+        # COSMIC advertises the standard ext-workspace protocol. Avoid binding the
+        # older private workspace protocol, whose wire format has diverged.
         std_workspace = runtime.workspace_protocol if runtime is not None else None
-        if std_workspace is not None:
-            from docking.platform.backends.wayland.workspaces import (
-                WaylandWorkspaceService,
-            )
+        from docking.platform.backends.wayland.workspaces import (
+            WaylandWorkspaceService,
+        )
 
-            workspaces = WaylandWorkspaceService(protocol=std_workspace)
-        elif cosmic_workspace is not None:
-            from docking.platform.backends.wayland.workspaces import (
-                WaylandWorkspaceService,
-            )
-
-            workspaces = WaylandWorkspaceService(protocol=cosmic_workspace)
+        workspaces: WorkspaceService | None = (
+            WaylandWorkspaceService(protocol=std_workspace)
+            if std_workspace is not None
+            else None
+        )
 
         # Visibility service backed by COSMIC overlap notify
         visibility: VisibilityService
@@ -312,6 +319,7 @@ class CosmicSessionBackend(SessionBackend):
 
         # Stash overlap adapter for late binding to the layer surface
         self._cosmic_overlap = cosmic_overlap
+        self._cosmic_toplevel = cosmic_toplevel
 
     @property
     def name(self) -> str:
@@ -341,7 +349,13 @@ class CosmicSessionBackend(SessionBackend):
             tracks_minimized=tracks_windows,
             tracks_maximized=tracks_windows,
             tracks_fullscreen=tracks_windows,
-            tracks_window_geometry=tracks_windows,
+            tracks_window_geometry=tracks_windows
+            and self._cosmic_toplevel is not None
+            and self._cosmic_toplevel.supports_geometry,
+            tracks_window_workspace=tracks_windows
+            and supports_workspaces
+            and self._cosmic_toplevel is not None
+            and self._cosmic_toplevel.supports_workspace,
             supports_activate=tracks_windows,
             supports_minimize=tracks_windows,
             supports_close=tracks_windows,
@@ -396,11 +410,11 @@ class CosmicSessionBackend(SessionBackend):
         if self._services.idle is not None:
             self._services.idle.start()
         self._services.previews.start()
+        if self._services.workspaces is not None:
+            self._services.workspaces.start()
         self._services.windows.start()
         self._services.surface.start()
         self._services.visibility.start()
-        if self._services.workspaces is not None:
-            self._services.workspaces.start()
         if self._services.screen_capture is not None:
             self._services.screen_capture.start()
 
@@ -425,6 +439,4 @@ class CosmicSessionBackend(SessionBackend):
         visibility = self._services.visibility
         if not isinstance(visibility, CosmicOverlapVisibilityService):
             return
-        for monitor in visibility._monitors:
-            if isinstance(monitor, CosmicOverlapMonitor) and not monitor._started:
-                monitor.attach_layer_surface(layer_surface)
+        visibility.attach_layer_surface(layer_surface)

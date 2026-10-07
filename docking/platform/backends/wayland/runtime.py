@@ -22,9 +22,15 @@ from typing import TYPE_CHECKING
 from docking.log import get_logger
 
 if TYPE_CHECKING:
+    from docking.platform.backends.wayland.cosmic import (
+        CosmicOverlapAdapter,
+        CosmicToplevelAdapter,
+    )
     from docking.platform.backends.wayland.idle import WaylandIdleService
     from docking.platform.backends.wayland.previews import (
         WaylandPreviewHandleTracker,
+        _CaptureResource,
+        _ShmPool,
     )
     from docking.platform.backends.wayland.toplevels import (
         WaylandForeignToplevelWindowService,
@@ -238,6 +244,12 @@ class WorkspaceProtocolAdapter:
 
     def set_flush_callback(self, callback: Callable[[], None] | None) -> None:
         self._flush = callback
+
+    def workspace_id_for_handle(self, handle: object) -> str | None:
+        if self._service is not None:
+            return self._service.workspace_id_for_handle(handle)
+        value = self._pending_data.get(handle, {}).get("id")
+        return str(value).strip() if value else None
 
     def bind(self, *, registry, name: int, version: int) -> None:
         from docking.platform.backends.wayland.protocols.ext_workspace_v1 import (
@@ -558,17 +570,17 @@ class PreviewProtocolAdapter:
         self._shm_formats.clear()
         self.available = False
 
-    def create_source(self, handle: object) -> object:
+    def create_source(self, handle: object) -> _CaptureResource:
         if not self.capture_available or self._source_manager is None:
             raise RuntimeError("Wayland preview capture is unavailable")
         return self._source_manager.create_source(handle)
 
-    def create_session(self, source: object) -> object:
+    def create_session(self, source: object) -> _CaptureResource:
         if not self.capture_available or self._capture_manager is None:
             raise RuntimeError("Wayland preview capture is unavailable")
         return self._capture_manager.create_session(source, 0)
 
-    def create_shm_pool(self, fd: int, size: int) -> object:
+    def create_shm_pool(self, fd: int, size: int) -> _ShmPool:
         if not self.capture_available or self._shm is None:
             raise RuntimeError("Wayland preview shm is unavailable")
         return self._shm.create_pool(fd, size)
@@ -676,12 +688,12 @@ class HyprlandPreviewProtocolAdapter:
         self._flush = None
         self.available = False
 
-    def create_frame(self, handle: object) -> object:
+    def create_frame(self, handle: object) -> _CaptureResource:
         if not self.capture_available or self._manager is None:
             raise RuntimeError("Hyprland preview capture is unavailable")
         return self._manager.capture_toplevel_with_wlr_toplevel_handle(0, handle)
 
-    def create_shm_pool(self, fd: int, size: int) -> object:
+    def create_shm_pool(self, fd: int, size: int) -> _ShmPool:
         if not self.capture_available or self._shm is None:
             raise RuntimeError("Hyprland preview shm is unavailable")
         return self._shm.create_pool(fd, size)
@@ -721,12 +733,12 @@ class PhocPreviewProtocolAdapter:
 
         self._shm = registry.bind(name, WlShm, min(version, WlShm.version))
 
-    def create_frame(self, handle: object, width: int, height: int) -> object:
+    def create_frame(self, handle: object, width: int, height: int) -> _CaptureResource:
         if not self.capture_available or self._manager is None:
             raise RuntimeError("Phoc preview capture is unavailable")
         return self._manager.get_thumbnail(handle, width, height)
 
-    def create_shm_pool(self, fd: int, size: int) -> object:
+    def create_shm_pool(self, fd: int, size: int) -> _ShmPool:
         if not self.capture_available or self._shm is None:
             raise RuntimeError("Phoc preview shm is unavailable")
         return self._shm.create_pool(fd, size)
@@ -759,14 +771,12 @@ class WaylandProtocolRuntime:
         hyprland_preview_adapter: HyprlandPreviewProtocolAdapter | None = None,
         phoc_preview_adapter: PhocPreviewProtocolAdapter | None = None,
         idle_adapter: IdleProtocolAdapter | None = None,
-        cosmic_toplevel_adapter: object | None = None,
-        cosmic_workspace_adapter: object | None = None,
-        cosmic_overlap_adapter: object | None = None,
+        cosmic_toplevel_adapter: CosmicToplevelAdapter | None = None,
+        cosmic_overlap_adapter: CosmicOverlapAdapter | None = None,
     ) -> None:
         from docking.platform.backends.wayland.cosmic import (
             CosmicOverlapAdapter,
             CosmicToplevelAdapter,
-            CosmicWorkspaceAdapter,
         )
         from docking.platform.backends.wayland.treeland import (
             TreelandOverlapAdapter,
@@ -783,56 +793,57 @@ class WaylandProtocolRuntime:
         self.phoc_previews = phoc_preview_adapter or PhocPreviewProtocolAdapter()
         self.idle = idle_adapter or IdleProtocolAdapter()
         self.cosmic_toplevel = cosmic_toplevel_adapter or CosmicToplevelAdapter()
-        self.cosmic_workspace = cosmic_workspace_adapter or CosmicWorkspaceAdapter()
         self.cosmic_overlap = cosmic_overlap_adapter or CosmicOverlapAdapter()
         self.treeland_overlap = TreelandOverlapAdapter()
         self.treeland_window_management = TreelandWindowManagementAdapter()
+        self.cosmic_toplevel.set_output_origin_probe(
+            self.treeland_overlap.output_origin
+        )
+        self.cosmic_toplevel.set_workspace_id_probe(
+            self.workspaces.workspace_id_for_handle
+        )
         self._display = None
         self._registry = None
         self._glib_source_id = 0
         self._running = False
 
     @property
-    def foreign_toplevel_protocol(self) -> object | None:
+    def foreign_toplevel_protocol(self) -> ForeignToplevelProtocolAdapter | None:
         return self.foreign_toplevel if self.foreign_toplevel.available else None
 
     @property
-    def workspace_protocol(self) -> object | None:
+    def workspace_protocol(self) -> WorkspaceProtocolAdapter | None:
         return self.workspaces if self.workspaces.available else None
 
     @property
-    def preview_protocol(self) -> object | None:
+    def preview_protocol(self) -> PreviewProtocolAdapter | None:
         return self.previews if self.previews.capture_available else None
 
     @property
-    def hyprland_preview_protocol(self) -> object | None:
+    def hyprland_preview_protocol(self) -> HyprlandPreviewProtocolAdapter | None:
         return (
             self.hyprland_previews if self.hyprland_previews.capture_available else None
         )
 
     @property
-    def phoc_preview_protocol(self) -> object | None:
+    def phoc_preview_protocol(self) -> PhocPreviewProtocolAdapter | None:
         return self.phoc_previews if self.phoc_previews.capture_available else None
 
     @property
-    def idle_protocol(self) -> object | None:
+    def idle_protocol(self) -> IdleProtocolAdapter | None:
         return self.idle if self.idle.available else None
 
     @property
-    def cosmic_toplevel_protocol(self) -> object | None:
+    def cosmic_toplevel_protocol(self) -> CosmicToplevelAdapter | None:
         return self.cosmic_toplevel if self.cosmic_toplevel.available else None
 
     @property
-    def standard_toplevel_protocol(self) -> object | None:
+    def standard_toplevel_protocol(self) -> CosmicToplevelAdapter | None:
         """Standard listing shared with COSMIC, without assuming management."""
         return self.cosmic_toplevel if self.cosmic_toplevel.available else None
 
     @property
-    def cosmic_workspace_protocol(self) -> object | None:
-        return self.cosmic_workspace if self.cosmic_workspace.available else None
-
-    @property
-    def cosmic_overlap_protocol(self) -> object | None:
+    def cosmic_overlap_protocol(self) -> CosmicOverlapAdapter | None:
         return self.cosmic_overlap if self.cosmic_overlap.available else None
 
     @property
@@ -869,7 +880,6 @@ class WaylandProtocolRuntime:
             self.phoc_previews.set_flush_callback(display.flush)
             self.idle.set_flush_callback(display.flush)
             self.cosmic_toplevel.set_flush_callback(display.flush)
-            self.cosmic_workspace.set_flush_callback(display.flush)
             self.cosmic_overlap.set_flush_callback(display.flush)
             self.treeland_overlap.set_flush_callback(display.flush)
             self.treeland_window_management.set_flush_callback(display.flush)
@@ -883,11 +893,10 @@ class WaylandProtocolRuntime:
             self._running = True
             log.info(
                 "Wayland protocol runtime started: foreign_toplevel=%s workspaces=%s "
-                "cosmic_toplevel=%s cosmic_workspaces=%s cosmic_overlap=%s",
+                "cosmic_toplevel=%s cosmic_overlap=%s",
                 self.foreign_toplevel.available,
                 self.workspaces.available,
                 self.cosmic_toplevel.available,
-                self.cosmic_workspace.available,
                 self.cosmic_overlap.available,
             )
             return True
@@ -904,7 +913,6 @@ class WaylandProtocolRuntime:
         self.phoc_previews.stop()
         self.idle.stop()
         self.cosmic_toplevel.stop()
-        self.cosmic_workspace.stop()
         self.cosmic_overlap.stop()
         self.treeland_overlap.stop()
         self.treeland_window_management.stop()
@@ -968,12 +976,6 @@ class WaylandProtocolRuntime:
             )
         elif interface == "zcosmic_toplevel_manager_v1":
             self.cosmic_toplevel.bind_toplevel_manager(
-                registry=registry,
-                name=name,
-                version=version,
-            )
-        elif interface == "zcosmic_workspace_manager_v2":
-            self.cosmic_workspace.bind(
                 registry=registry,
                 name=name,
                 version=version,

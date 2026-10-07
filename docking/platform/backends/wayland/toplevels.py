@@ -38,6 +38,7 @@ from docking.platform.applications.types import ApplicationMatch
 from docking.platform.backends.base import (
     ActionResult,
     DisplayServer,
+    Rect,
     WindowId,
     WindowService,
     WindowSnapshot,
@@ -72,6 +73,8 @@ class _ToplevelState:
     minimized: bool | None = None
     maximized: bool | None = None
     fullscreen: bool | None = None
+    geometry: Rect | None = None
+    workspace_id: str | None = None
     closed: bool = False
     outputs: set[object] = field(default_factory=set)
     parent: object | None = None
@@ -267,6 +270,14 @@ class WaylandForeignToplevelWindowService(WindowService):
         """Track transient parent relationships, if provided."""
         self._ensure_state(handle=handle).parent = parent
 
+    def geometry_changed(self, handle: object, geometry: Rect | None) -> None:
+        """Apply compositor-provided geometry to a foreign toplevel."""
+        self._ensure_state(handle=handle).geometry = geometry
+
+    def workspace_changed(self, handle: object, workspace_id: str | None) -> None:
+        """Apply compositor-provided workspace identity to a foreign toplevel."""
+        self._ensure_state(handle=handle).workspace_id = workspace_id
+
     def done(self, handle: object) -> None:
         """Publish state after a protocol atomic update batch."""
         state = self._ensure_state(handle=handle)
@@ -365,6 +376,8 @@ class WaylandForeignToplevelWindowService(WindowService):
             minimized=state.minimized,
             maximized=state.maximized,
             fullscreen=state.fullscreen,
+            geometry=state.geometry,
+            workspace_id=state.workspace_id,
             can_activate=self._supports_action("activate", state.handle),
             can_minimize=self._supports_action("set_minimized", state.handle),
             can_close=self._supports_action("close", state.handle),
