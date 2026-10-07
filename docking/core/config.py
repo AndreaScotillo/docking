@@ -269,6 +269,7 @@ DEFAULT_UNHIDE_DELAY_MS = 0
 DEFAULT_HIDE_TIME_MS = 250
 DEFAULT_WINDOW_PREVIEW_THUMBNAILS_ENABLED = True
 DEFAULT_WINDOW_PREVIEW_HIGHLIGHT_THUMBNAILS_ON_HOVER = False
+DEFAULT_PREVIEW_HOVER_OUTLINE = False
 DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH = 200
 DEFAULT_LOCK_ICONS = False
 DEFAULT_CURRENT_WORKSPACE_ONLY = False
@@ -794,6 +795,8 @@ class Config:
     window_preview_highlight_thumbnails_on_hover: bool = (
         DEFAULT_WINDOW_PREVIEW_HIGHLIGHT_THUMBNAILS_ON_HOVER
     )
+    # Whether hovering a preview thumbnail outlines the real window (X11 only)
+    preview_hover_outline: bool = DEFAULT_PREVIEW_HOVER_OUTLINE
     # Width in pixels of window preview thumbnails (height keeps the 4:3 ratio)
     window_preview_thumbnail_width: int = DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH
     # Whether icon reordering, drag-in, and drag-off removal are locked
@@ -938,6 +941,10 @@ class Config:
         self.window_preview_highlight_thumbnails_on_hover = _normalize_bool(
             self.window_preview_highlight_thumbnails_on_hover,
             default=DEFAULT_WINDOW_PREVIEW_HIGHLIGHT_THUMBNAILS_ON_HOVER,
+        )
+        self.preview_hover_outline = _normalize_bool(
+            self.preview_hover_outline,
+            default=DEFAULT_PREVIEW_HOVER_OUTLINE,
         )
         self.window_preview_thumbnail_width = _normalize_int(
             self.window_preview_thumbnail_width,

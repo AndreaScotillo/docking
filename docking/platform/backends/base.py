@@ -214,6 +214,7 @@ class PlatformCapabilities:
     supports_close: bool = False
     supports_window_menu: bool = False
     tracks_window_geometry: bool = False
+    supports_window_outline: bool = False
     tracks_window_workspace: bool = False
     supports_current_workspace_filter: bool = False
     supports_workspace_list: bool = False

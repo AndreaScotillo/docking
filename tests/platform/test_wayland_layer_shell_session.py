@@ -137,6 +137,7 @@ def test_wayland_layer_shell_session_uses_foreign_toplevel_service_when_availabl
     assert backend.capabilities.supports_minimize is True
     assert backend.capabilities.supports_close is True
     assert backend.capabilities.tracks_window_geometry is False
+    assert backend.capabilities.supports_window_outline is False
     assert backend.capabilities.tracks_window_workspace is False
 
 
