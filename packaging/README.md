@@ -88,15 +88,23 @@ docking
 - **Compression**: binary `.deb` artifacts are built with `xz` compression for
   compatibility with older `dpkg` versions that cannot unpack `control.tar.zst`.
 
-## APT repository (Cloudsmith)
+## Package repositories (Cloudsmith)
 
-Stable releases publish to Cloudsmith after the `.deb` installation matrix
-passes. Publication uses OIDC, validates both architectures, and supports
-checksum-safe retries of a specific release tag.
+When repository publication is enabled, stable releases publish to Cloudsmith
+after the installation matrix passes:
+`.deb` artifacts to `docking-apt` and `.rpm` artifacts to `docking-rpm`.
+Publication uses OIDC, validates both architectures, and supports safe retries of
+a specific release tag. Both formats publish from the same release, and CI installs
+the built RPM in Fedora and openSUSE containers before any publication happens.
+Disabling publication skips both package formats and their repository checks,
+including manual publication retries.
 
-See the [maintainer guide](cloudsmith/README.md) for configuration and retries,
-and the [APT installation instructions](../README.md#debian-and-ubuntu-apt)
-for users.
+User installation instructions live in the
+[APT](../README.md#debian-and-ubuntu-apt) and
+[RPM](../README.md#fedora-and-opensuse-rpm) sections.
+The [website](https://docking.cc/#install) presents both sets of instructions in
+expandable panels. The RPM repository requires its first verified publication
+before users can install from it; release downloads remain available.
 
 ## PPA (Launchpad)
 
@@ -218,12 +226,25 @@ Notes:
 
 ## RPM
 
+The Ubuntu build instructions below require Docker to be installed and usable
+by your user for the target-specific native fallback builds.
+
 ```bash
 # Install tooling
-sudo apt install rpm python3-pip gettext python3-dev libwayland-dev wayland-protocols gcc
+sudo apt install rpm python3-pip python3-venv gettext python3-dev libwayland-dev wayland-protocols pkg-config gcc
+
+# Use current Python build tooling, including on Ubuntu 22.04.
+RPM_BUILD_ENV="$(mktemp -d)"
+python3 -m venv "$RPM_BUILD_ENV"
+. "$RPM_BUILD_ENV/bin/activate"
+python -m pip install --upgrade pip setuptools wheel
+
+# Build native fallbacks for the Fedora and openSUSE Python versions.
+bash packaging/rpm/build-wayland-vendors.sh "$RPM_BUILD_ENV/wayland-vendors"
 
 # Build RPM package
-./packaging/rpm/build.sh
+DOCKING_EXTRA_PYWAYLAND="$RPM_BUILD_ENV/wayland-vendors" ./packaging/rpm/build.sh
+deactivate
 ```
 
 Output artifact:
@@ -233,7 +254,11 @@ Output artifact:
 Install locally (RPM-based distros):
 
 ```bash
+# Fedora
 sudo dnf install ./artifacts/docking-*.rpm
+
+# openSUSE (local build artifacts are unsigned)
+sudo zypper install --allow-unsigned-rpm ./artifacts/docking-*.rpm
 ```
 
 Notes:
@@ -243,6 +268,16 @@ Notes:
 - The RPM is architecture-specific because the packaged vendored Python wheels can include native binaries.
 - CI builds the RPM on both x86_64 and ARM64 runners and publishes both variants.
 - Python API dependencies used by weather are vendored under `/usr/lib/docking/vendor`.
+- `Requires` in the spec serve Fedora and openSUSE from one artifact, so the
+  names that differ between them are written as RPM boolean dependencies, such as
+  `(gtk3 or typelib-1_0-Gtk-3_0)`.
+- CI runs `packaging/rpm/build-wayland-vendors.sh` and passes the result through
+  `DOCKING_EXTRA_PYWAYLAND`, because the Ubuntu build host cannot produce PyWayland
+  glue for the Fedora and openSUSE Python versions, and both distributions package
+  PyWayland older than the protocol modules the Wayland backend imports.
+
+Stable releases also publish the RPM to the `docking-rpm` Cloudsmith repository; see the
+[RPM installation instructions](../README.md#fedora-and-opensuse-rpm).
 
 ## Arch
 
