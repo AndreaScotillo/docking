@@ -1529,6 +1529,31 @@ class TestSettingsWindowController:
         assert config.save.call_count == 2
         assert actions.refresh_launcher_overlay_visibility.call_count == 2
 
+    def test_thumbnail_outline_setting_refreshes_preview_immediately(self, monkeypatch):
+        monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)
+        monkeypatch.setattr(
+            settings_mod, "load_catalog_icon", lambda applet_id, size: None
+        )
+        monkeypatch.setattr(settings_mod, "get_applet_catalog", dict)
+        actions = MagicMock()
+        config = _config()
+        config.preview_thumbnail_outline = True
+        controller = _settings_controller(
+            parent=_parent_window(),
+            actions=actions,
+            model=SimpleNamespace(pinned_items=[], get_applet=lambda _desktop_id: None),
+            config=config,
+        )
+        controller.show()
+        actions.refresh_thumbnail_outline.assert_not_called()
+
+        controller._preview_thumbnail_outline_switch.set_active(False)
+        controller._preview_thumbnail_outline_switch.emit_notify_active()
+
+        assert config.preview_thumbnail_outline is False
+        config.save.assert_called_once()
+        actions.refresh_thumbnail_outline.assert_called_once_with()
+
     def test_current_workspace_only_updates_surface_scope(self, monkeypatch):
         monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)
         monkeypatch.setattr(

@@ -46,7 +46,9 @@ def _make_window():
         dnd=SimpleNamespace(set_locked=MagicMock()),
         surface_service=SimpleNamespace(set_workspace_scope=MagicMock()),
         tooltip=SimpleNamespace(hide=MagicMock()),
-        preview=SimpleNamespace(hide=MagicMock()),
+        preview=SimpleNamespace(
+            hide=MagicMock(), refresh_thumbnail_outline=MagicMock()
+        ),
         theme="old-theme",
         set_theme=MagicMock(),
         cursor_x=12.0,
@@ -106,6 +108,7 @@ class TestDockRuntime:
         runtime.set_current_workspace_only(True)
         runtime.hide_tooltip()
         runtime.hide_hover_ui()
+        runtime.refresh_thumbnail_outline()
         runtime.set_theme(cast(Theme, "new-theme"))
         runtime.check_for_updates_now()
         runtime.open_releases_page()
@@ -117,6 +120,7 @@ class TestDockRuntime:
         )
         assert window.tooltip.hide.call_count == 2
         window.preview.hide.assert_called_once()
+        window.preview.refresh_thumbnail_outline.assert_called_once()
         update_checker.check_now.assert_called_once()
         update_checker.open_releases_page.assert_called_once()
         window.set_theme.assert_called_once_with("new-theme")

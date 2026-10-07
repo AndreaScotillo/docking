@@ -53,6 +53,7 @@ def test_settings_actions_delegate_all_remaining_to_runtime():
     actions.refresh_pressure_handler()
     actions.set_current_workspace_only(False)
     actions.hide_tooltip()
+    actions.refresh_thumbnail_outline()
     actions.open_releases_page()
 
     runtime.on_hide_mode_changed.assert_called_once_with()
@@ -60,6 +61,7 @@ def test_settings_actions_delegate_all_remaining_to_runtime():
     runtime.refresh_pressure_handler.assert_called_once_with()
     runtime.set_current_workspace_only.assert_called_once_with(False)
     runtime.hide_tooltip.assert_called_once_with()
+    runtime.refresh_thumbnail_outline.assert_called_once_with()
     runtime.open_releases_page.assert_called_once_with()
 
 

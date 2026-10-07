@@ -206,6 +206,7 @@ class PreviewPopup(Gtk.Window):
         self._hide_timer_id: int = 0
         self._current_desktop_id: str = ""
         self._thumbnail_outline_enabled: Callable[[], bool] = lambda: False
+        self._hovered_thumbnail: Gtk.EventBox | None = None
 
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)
@@ -227,8 +228,19 @@ class PreviewPopup(Gtk.Window):
         self._autohide = controller
 
     def set_thumbnail_outline_enabled(self, enabled: Callable[[], bool]) -> None:
-        """Set the live probe for the hovered-thumbnail border (polled per hover)."""
+        """Set the live probe for the hovered-thumbnail border."""
         self._thumbnail_outline_enabled = enabled
+        self.refresh_thumbnail_outline()
+
+    def refresh_thumbnail_outline(self) -> None:
+        """Apply the current setting to the thumbnail under the pointer."""
+        widget = self._hovered_thumbnail
+        if widget is None:
+            return
+        if self._thumbnail_outline_enabled():
+            widget.set_state_flags(Gtk.StateFlags.PRELIGHT, False)
+        else:
+            widget.unset_state_flags(Gtk.StateFlags.PRELIGHT)
 
     def set_pointer_inside_dock_probe(self, probe: Callable[[], bool]) -> None:
         self._pointer_inside_dock = probe
@@ -266,6 +278,7 @@ class PreviewPopup(Gtk.Window):
         # this long-lived popup is already visible.
         self.hide()
         child = self.get_child()
+        self._hovered_thumbnail = None
         if child:
             child.destroy()
 
@@ -412,13 +425,15 @@ class PreviewPopup(Gtk.Window):
     def _on_thumb_enter(self, widget: Gtk.EventBox, _event: Gdk.EventCrossing) -> bool:
         """Highlight the hovered thumbnail."""
         # EventBox never sets PRELIGHT itself, so ``.preview-thumb:hover`` needs this.
-        if self._thumbnail_outline_enabled():
-            widget.set_state_flags(Gtk.StateFlags.PRELIGHT, False)
+        self._hovered_thumbnail = widget
+        self.refresh_thumbnail_outline()
         return False
 
     def _on_thumb_leave(self, widget: Gtk.EventBox, event: Gdk.EventCrossing) -> bool:
         if event.detail != Gdk.NotifyType.INFERIOR:
             widget.unset_state_flags(Gtk.StateFlags.PRELIGHT)
+            if self._hovered_thumbnail is widget:
+                self._hovered_thumbnail = None
         return False
 
     @staticmethod
