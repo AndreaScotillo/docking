@@ -63,7 +63,6 @@ def _load_preview_module():
     repo_module = types.ModuleType("gi.repository")
     repo_module.Gtk = fake_gtk
     repo_module.Gdk = fake_gdk
-    repo_module.GdkPixbuf = SimpleNamespace(Pixbuf=object)
     repo_module.GLib = fake_glib
     repo_module.Pango = fake_pango
     gi_module.repository = repo_module
@@ -218,7 +217,6 @@ def _make_popup():
     popup._hide_timer_id = 0
     popup._current_desktop_id = ""
     popup._thumbnail_outline_enabled = lambda: False
-    popup._hovered_thumbnail = None
     popup.get_transient_for = MagicMock(return_value=None)
     return popup
 
@@ -471,32 +469,6 @@ class TestPreviewPopupIntegration:
         widget.unset_state_flags.assert_called_once_with(
             preview_mod.Gtk.StateFlags.PRELIGHT
         )
-
-    def test_setting_change_refreshes_outline_without_pointer_motion(self):
-        popup = _make_popup()
-        config = Config(preview_thumbnail_outline=True)
-        popup.set_thumbnail_outline_enabled(lambda: config.preview_thumbnail_outline)
-        widget = MagicMock()
-        popup._on_thumb_enter(widget, MagicMock())
-        widget.set_state_flags.assert_called_once_with(
-            preview_mod.Gtk.StateFlags.PRELIGHT, False
-        )
-
-        config.preview_thumbnail_outline = False
-        popup.refresh_thumbnail_outline()
-
-        widget.unset_state_flags.assert_called_once_with(
-            preview_mod.Gtk.StateFlags.PRELIGHT
-        )
-        config.preview_thumbnail_outline = True
-        popup.refresh_thumbnail_outline()
-        assert widget.set_state_flags.call_count == 2
-
-        popup._on_thumb_leave(widget, SimpleNamespace(detail=object()))
-        widget.reset_mock()
-        config.preview_thumbnail_outline = False
-        popup.refresh_thumbnail_outline()
-        widget.unset_state_flags.assert_not_called()
 
     def test_set_thumbnail_outline_enabled_stores_probe(self):
         popup = _make_popup()

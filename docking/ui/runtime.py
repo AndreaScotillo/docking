@@ -90,9 +90,6 @@ class DockRuntime:
     def hide_tooltip(self) -> None:
         self._window.tooltip.hide()
 
-    def refresh_thumbnail_outline(self) -> None:
-        self._window.preview.refresh_thumbnail_outline()
-
     def hide_hover_ui(self) -> None:
         self._window.tooltip.hide()
         self._window.preview.hide()

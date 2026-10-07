@@ -198,9 +198,6 @@ class SettingsActions:
     def set_current_workspace_only(self, enabled: bool) -> None:
         self._runtime.set_current_workspace_only(enabled)
 
-    def refresh_thumbnail_outline(self) -> None:
-        self._runtime.refresh_thumbnail_outline()
-
     def hide_tooltip(self) -> None:
         self._runtime.hide_tooltip()
 
@@ -1218,7 +1215,6 @@ class SettingsWindowController:
             self._register_switch_binding(
                 config_attr="preview_thumbnail_outline",
                 widget=self._preview_thumbnail_outline_switch,
-                on_change=self._actions.refresh_thumbnail_outline,
             ),
             self._register_switch_binding(
                 config_attr="tooltips_enabled",
