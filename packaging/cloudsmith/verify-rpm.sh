@@ -23,7 +23,7 @@ fi
 
 refresh() {
     if [ "$family" = fedora ]; then
-        dnf -q makecache
+        dnf -y -q makecache
     else
         zypper --non-interactive --gpg-auto-import-keys refresh >/dev/null
     fi
@@ -72,9 +72,9 @@ package_payload() {
 # Bootstrap tooling only. Nothing here can satisfy a docking dependency, so the
 # install check further down still exercises the spec's Requires.
 if [ "$family" = fedora ]; then
-    dnf install -y -q --setopt=install_weak_deps=False gnupg2 curl
+    dnf install -y -q --setopt=install_weak_deps=False gnupg2 curl diffutils
 else
-    zypper --non-interactive install --no-recommends gnupg curl
+    zypper --non-interactive install --no-recommends gnupg curl gawk diffutils
 fi
 
 current=(/release/current/*.rpm)
