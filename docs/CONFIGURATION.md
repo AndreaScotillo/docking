@@ -66,6 +66,7 @@ should not be edited by hand.
 | `zoom_range` | `3` | integer, minimum `0` | Number of icon widths over which parabolic zoom tapers off. This is currently file-only. |
 | `tooltips_enabled` | `true` | boolean | Shows item names and dynamic details on hover. |
 | `previews_enabled` | `true` | boolean | Shows window thumbnails when hovering over running applications. |
+| `preview_thumbnail_outline` | `false` | boolean | Draws a blue border around the preview thumbnail under the pointer. Off by default to keep the popup minimal. Works on every session type. |
 | `show_window_count_numbers` | `false` | boolean | Adds a number to a running indicator when an application has multiple windows. |
 | `show_launcher_badges` | `true` | boolean | Shows numeric counts reported through launcher integration. |
 | `show_launcher_progress` | `true` | boolean | Shows progress reported through launcher integration. |

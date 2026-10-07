@@ -268,6 +268,7 @@ DEFAULT_HIDE_DELAY_MS = 0
 DEFAULT_UNHIDE_DELAY_MS = 0
 DEFAULT_HIDE_TIME_MS = 250
 DEFAULT_PREVIEWS_ENABLED = True
+DEFAULT_PREVIEW_THUMBNAIL_OUTLINE = False
 DEFAULT_LOCK_ICONS = False
 DEFAULT_CURRENT_WORKSPACE_ONLY = False
 DEFAULT_ANCHOR_APPLETS = False
@@ -787,6 +788,7 @@ class Config:
     hide_time_ms: int = DEFAULT_HIDE_TIME_MS
     # Whether to show window preview thumbnails on hover
     previews_enabled: bool = DEFAULT_PREVIEWS_ENABLED
+    preview_thumbnail_outline: bool = DEFAULT_PREVIEW_THUMBNAIL_OUTLINE
     # Whether icon reordering, drag-in, and drag-off removal are locked
     lock_icons: bool = DEFAULT_LOCK_ICONS
     # Only show running apps from the active workspace
@@ -925,6 +927,10 @@ class Config:
         self.previews_enabled = _normalize_bool(
             self.previews_enabled,
             default=DEFAULT_PREVIEWS_ENABLED,
+        )
+        self.preview_thumbnail_outline = _normalize_bool(
+            self.preview_thumbnail_outline,
+            default=DEFAULT_PREVIEW_THUMBNAIL_OUTLINE,
         )
         self.lock_icons = _normalize_bool(
             self.lock_icons,

@@ -444,6 +444,9 @@ class DockWindow(Gtk.Window):
         self.preview.set_transient_for(self)
         self.preview.set_pointer_inside_dock_probe(self.is_pointer_inside_dock)
         self.preview.set_autohide(controller=self.autohide)
+        self.preview.set_thumbnail_outline_enabled(
+            lambda: self.config.preview_thumbnail_outline
+        )
         self.hover.set_preview(preview=self.preview)
 
     def is_pointer_inside_dock(self) -> bool:

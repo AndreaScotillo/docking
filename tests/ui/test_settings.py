@@ -737,6 +737,7 @@ def _config():
     return SimpleNamespace(
         hide_mode="autohide",
         previews_enabled=True,
+        preview_thumbnail_outline=True,
         tooltips_enabled=True,
         left_click_action="toggle",
         middle_click_action="new-window",
@@ -1598,6 +1599,51 @@ class TestSettingsWindowController:
         assert controller._hide_delay_spin.sensitive is False
         assert controller._unhide_delay_spin.sensitive is False
         assert controller._zoom_percent_spin.sensitive is False
+
+    @pytest.mark.parametrize(
+        ("previews_enabled", "expected_sensitive"), [(True, True), (False, False)]
+    )
+    def test_thumbnail_outline_switch_follows_previews_switch(
+        self, monkeypatch, previews_enabled, expected_sensitive
+    ):
+        monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)
+        monkeypatch.setattr(
+            settings_mod, "load_catalog_icon", lambda applet_id, size: None
+        )
+        monkeypatch.setattr(settings_mod, "get_applet_catalog", dict)
+        config = _config()
+        config.previews_enabled = previews_enabled
+        controller = _settings_controller(
+            parent=_parent_window(),
+            actions=MagicMock(),
+            model=SimpleNamespace(pinned_items=[], get_applet=lambda _desktop_id: None),
+            config=config,
+        )
+
+        controller.show()
+
+        switch = controller._preview_thumbnail_outline_switch
+        assert switch.sensitive is expected_sensitive
+
+    def test_thumbnail_outline_switch_persists_to_config(self, monkeypatch):
+        monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)
+        monkeypatch.setattr(
+            settings_mod, "load_catalog_icon", lambda applet_id, size: None
+        )
+        monkeypatch.setattr(settings_mod, "get_applet_catalog", dict)
+        config = _config()
+        controller = _settings_controller(
+            parent=_parent_window(),
+            actions=MagicMock(),
+            model=SimpleNamespace(pinned_items=[], get_applet=lambda _desktop_id: None),
+            config=config,
+        )
+
+        controller.show()
+        controller._preview_thumbnail_outline_switch.set_active(False)
+        controller._preview_thumbnail_outline_switch.emit_notify_active()
+
+        assert config.preview_thumbnail_outline is False
 
     def test_binding_change_updates_config_once_and_runtime(self, monkeypatch):
         monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)

@@ -58,6 +58,21 @@ class TestConfigDefaults:
         # Then
         assert c.previews_enabled is True
 
+    def test_preview_thumbnail_outline_default_false(self):
+        # Given / When
+        c = Config()
+        # Then
+        assert c.preview_thumbnail_outline is False
+
+    def test_preview_thumbnail_outline_normalizes_and_roundtrips(self):
+        # Given / When
+        on = Config(preview_thumbnail_outline="yes")
+        junk = Config(preview_thumbnail_outline="garbage")
+        # Then
+        assert on.preview_thumbnail_outline is True
+        assert junk.preview_thumbnail_outline is False
+        assert on.to_dict()["preview_thumbnail_outline"] is True
+
     def test_hide_delay_default_zero(self):
         # Given / When
         c = Config()

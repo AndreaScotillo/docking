@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from docking.core.config import Config
 from docking.core.position import Position
 from docking.platform.backends.base import Rect, WindowId, WindowSnapshot
 
@@ -39,11 +40,14 @@ def _load_preview_module():
         Orientation=SimpleNamespace(HORIZONTAL=1, VERTICAL=2),
         Align=SimpleNamespace(CENTER=1),
         IconSize=SimpleNamespace(DIALOG=1),
+        StateFlags=SimpleNamespace(NORMAL=0, PRELIGHT=2),
     )
     fake_gdk = types.SimpleNamespace(
         WindowTypeHint=SimpleNamespace(TOOLTIP=1),
         Screen=SimpleNamespace(get_default=lambda: object()),
-        EventMask=SimpleNamespace(BUTTON_PRESS_MASK=1, ENTER_NOTIFY_MASK=2),
+        EventMask=SimpleNamespace(
+            BUTTON_PRESS_MASK=1, ENTER_NOTIFY_MASK=2, LEAVE_NOTIFY_MASK=4
+        ),
         NotifyType=SimpleNamespace(INFERIOR=1),
         CrossingMode=SimpleNamespace(NORMAL=1),
     )
@@ -212,6 +216,7 @@ def _make_popup():
     popup._pointer_inside_dock = None
     popup._hide_timer_id = 0
     popup._current_desktop_id = ""
+    popup._thumbnail_outline_enabled = lambda: False
     popup.get_transient_for = MagicMock(return_value=None)
     return popup
 
@@ -317,7 +322,9 @@ class TestPreviewPopupIntegration:
             preview_mod,
             "Gdk",
             SimpleNamespace(
-                EventMask=SimpleNamespace(BUTTON_PRESS_MASK=1, ENTER_NOTIFY_MASK=2),
+                EventMask=SimpleNamespace(
+                    BUTTON_PRESS_MASK=1, ENTER_NOTIFY_MASK=2, LEAVE_NOTIFY_MASK=4
+                ),
                 RGBA=lambda *_args, **_kwargs: None,
             ),
         )
@@ -418,3 +425,54 @@ class TestPreviewPopupIntegration:
         assert popup.current_desktop_id == "firefox.desktop"
         popup.hide.assert_not_called()
         popup._autohide.on_mouse_leave.assert_not_called()
+
+    def test_thumb_enter_sets_prelight_when_thumbnail_outline_enabled(self):
+        popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: True
+        widget = MagicMock()
+
+        preview_mod.PreviewPopup._on_thumb_enter(popup, widget, MagicMock())
+
+        widget.set_state_flags.assert_called_once_with(
+            preview_mod.Gtk.StateFlags.PRELIGHT, False
+        )
+
+    def test_thumb_enter_never_sets_prelight_when_thumbnail_outline_disabled(self):
+        popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: False
+        widget = MagicMock()
+
+        preview_mod.PreviewPopup._on_thumb_enter(popup, widget, MagicMock())
+
+        widget.set_state_flags.assert_not_called()
+
+    def test_thumb_enter_does_not_set_prelight_with_default_config(self):
+        popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: Config().preview_thumbnail_outline
+        widget = MagicMock()
+
+        preview_mod.PreviewPopup._on_thumb_enter(popup, widget, MagicMock())
+
+        widget.set_state_flags.assert_not_called()
+
+    def test_thumb_leave_clears_prelight_even_if_option_turned_off_meanwhile(self):
+        popup = _make_popup()
+        popup._thumbnail_outline_enabled = lambda: False
+        widget = MagicMock()
+        outside = SimpleNamespace(detail=object())
+        inferior = SimpleNamespace(detail=preview_mod.Gdk.NotifyType.INFERIOR)
+
+        preview_mod.PreviewPopup._on_thumb_leave(popup, widget, inferior)
+        widget.unset_state_flags.assert_not_called()
+        preview_mod.PreviewPopup._on_thumb_leave(popup, widget, outside)
+
+        widget.unset_state_flags.assert_called_once_with(
+            preview_mod.Gtk.StateFlags.PRELIGHT
+        )
+
+    def test_set_thumbnail_outline_enabled_stores_probe(self):
+        popup = _make_popup()
+
+        preview_mod.PreviewPopup.set_thumbnail_outline_enabled(popup, lambda: True)
+
+        assert popup._thumbnail_outline_enabled() is True
