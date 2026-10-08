@@ -52,6 +52,7 @@ class WindowOutline(Gtk.Window):
         self.set_app_paintable(True)
 
         visual = self.get_screen().get_rgba_visual()
+        self._has_rgba_visual = visual is not None
         if visual:
             self.set_visual(visual)
 
@@ -65,6 +66,12 @@ class WindowOutline(Gtk.Window):
     def show_around(self, rect: Rect) -> None:
         """Outline ``rect`` (root coordinates); degenerate rects hide instead."""
         if rect.width <= 0 or rect.height <= 0:
+            self.hide()
+            return
+        # Without a compositor the RGBA visual is still offered, but the cleared
+        # interior is painted opaque and would cover the target window. Checked
+        # on every call: a compositor can start or stop while the dock runs.
+        if not (self._has_rgba_visual and self.get_screen().is_composited()):
             self.hide()
             return
         self.resize(rect.width, rect.height)

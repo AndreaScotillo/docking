@@ -11,6 +11,17 @@ from docking.platform.backends.base import Rect
 gtk_ui = pytest.importorskip("docking.ui.window_outline")
 
 
+@pytest.fixture(autouse=True)
+def composited_screen(monkeypatch):
+    """Bare X servers (the CI Xephyr) have no compositor; assume one by default."""
+    screen = MagicMock()
+    screen.is_composited.return_value = True
+    monkeypatch.setattr(
+        gtk_ui.Gdk.Screen, "is_composited", lambda _self: screen.is_composited()
+    )
+    return screen
+
+
 class TestWindowOutlineHandlers:
     def test_constructor_sets_empty_input_shape(self, monkeypatch):
         shapes = []
@@ -65,6 +76,54 @@ class TestWindowOutlineWidget:
         try:
             outline.show_around(Rect(0, 0, 0, 10))
             assert not outline.get_visible()
+        finally:
+            outline.destroy()
+
+
+class TestWindowOutlineTransparencyGate:
+    def test_not_composited_hides_instead_of_showing(self, composited_screen):
+        surface = MagicMock()
+        surface.overlay_uses_toplevel = False
+        outline = gtk_ui.WindowOutline(surface)
+        try:
+            outline.show_around(Rect(30, 40, 500, 400))
+            assert outline.get_visible()
+            composited_screen.is_composited.return_value = False
+            surface.place_overlay.reset_mock()
+            outline.show_around(Rect(30, 40, 500, 400))
+            assert not outline.get_visible()
+            surface.place_overlay.assert_not_called()
+        finally:
+            outline.destroy()
+
+    def test_composited_screen_shows(self, composited_screen):
+        composited_screen.is_composited.return_value = True
+        outline = gtk_ui.WindowOutline()
+        try:
+            outline.show_around(Rect(30, 40, 500, 400))
+            assert outline.get_visible()
+        finally:
+            outline.destroy()
+
+    def test_missing_rgba_visual_hides_even_when_composited(self):
+        outline = gtk_ui.WindowOutline()
+        outline._has_rgba_visual = False
+        try:
+            outline.show_around(Rect(30, 40, 500, 400))
+            assert not outline.get_visible()
+        finally:
+            outline.destroy()
+
+    def test_degenerate_rect_hides_without_consulting_the_screen(
+        self, composited_screen
+    ):
+        outline = gtk_ui.WindowOutline()
+        try:
+            outline.show_around(Rect(30, 40, 500, 400))
+            composited_screen.is_composited.reset_mock()
+            outline.show_around(Rect(0, 0, 0, 10))
+            assert not outline.get_visible()
+            composited_screen.is_composited.assert_not_called()
         finally:
             outline.destroy()
 
