@@ -388,7 +388,7 @@ def main():
         zoom_enabled=False,
         startup_tips_enabled=False,
         update_check_enabled=False,
-        preview_hover_outline=True,
+        window_preview_outline_window_on_hover=True,
     ).save()
     original = app._start_runtime
     failures = []

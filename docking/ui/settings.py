@@ -1262,7 +1262,7 @@ class SettingsWindowController:
                 widget=self._window_preview_highlight_thumbnails_on_hover_switch,
             ),
             self._register_switch_binding(
-                config_attr="preview_hover_outline",
+                config_attr="window_preview_outline_window_on_hover",
                 widget=self._preview_outline_switch,
             ),
             self._register_switch_binding(

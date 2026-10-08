@@ -738,7 +738,7 @@ def _config():
         hide_mode="autohide",
         window_preview_thumbnails_enabled=True,
         window_preview_highlight_thumbnails_on_hover=True,
-        preview_hover_outline=False,
+        window_preview_outline_window_on_hover=False,
         window_preview_thumbnail_width=200,
         tooltips_enabled=True,
         left_click_action="toggle",
@@ -1751,7 +1751,7 @@ class TestSettingsWindowController:
         controller._preview_outline_switch.set_active(True)
         controller._preview_outline_switch.emit_notify_active()
 
-        assert config.preview_hover_outline is True
+        assert config.window_preview_outline_window_on_hover is True
 
     def test_binding_change_updates_config_once_and_runtime(self, monkeypatch):
         monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)

@@ -454,7 +454,7 @@ class DockWindow(Gtk.Window):
         if self.session_backend.capabilities.supports_window_outline:
             self.preview.set_window_outline(
                 WindowOutline(self.session_backend.surface),
-                lambda: self.config.preview_hover_outline,
+                lambda: self.config.window_preview_outline_window_on_hover,
             )
         self.hover.set_preview(preview=self.preview)
 
