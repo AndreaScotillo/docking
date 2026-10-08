@@ -121,7 +121,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
-from docking.core.config import DEFAULT_PREVIEW_THUMBNAIL_WIDTH
+from docking.core.config import DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH
 from docking.core.position import Position, is_horizontal
 from docking.log import get_logger
 from docking.platform.backends.base import Size, WindowId, WindowService, WindowSnapshot
@@ -134,7 +134,7 @@ if TYPE_CHECKING:
 
 log = get_logger(name="preview")
 
-THUMB_W = DEFAULT_PREVIEW_THUMBNAIL_WIDTH
+THUMB_W = DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH
 THUMB_H = 150
 POPUP_PADDING = 8
 THUMB_SPACING = 8

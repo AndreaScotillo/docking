@@ -269,7 +269,7 @@ DEFAULT_UNHIDE_DELAY_MS = 0
 DEFAULT_HIDE_TIME_MS = 250
 DEFAULT_PREVIEWS_ENABLED = True
 DEFAULT_PREVIEW_THUMBNAIL_OUTLINE = False
-DEFAULT_PREVIEW_THUMBNAIL_WIDTH = 200
+DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH = 200
 DEFAULT_LOCK_ICONS = False
 DEFAULT_CURRENT_WORKSPACE_ONLY = False
 DEFAULT_ANCHOR_APPLETS = False
@@ -283,8 +283,8 @@ DEFAULT_THEME = "default"
 DEFAULT_TRANSPARENCY = 1.0
 MIN_ICON_SIZE = 32
 MAX_ICON_SIZE = 128
-MIN_PREVIEW_THUMBNAIL_WIDTH = 120
-MAX_PREVIEW_THUMBNAIL_WIDTH = 400
+MIN_WINDOW_PREVIEW_THUMBNAIL_WIDTH = 120
+MAX_WINDOW_PREVIEW_THUMBNAIL_WIDTH = 400
 MIN_ZOOM_PERCENT = 1.0
 MAX_ZOOM_PERCENT = 4.0
 MIN_TRANSPARENCY = 0.15
@@ -793,7 +793,7 @@ class Config:
     previews_enabled: bool = DEFAULT_PREVIEWS_ENABLED
     preview_thumbnail_outline: bool = DEFAULT_PREVIEW_THUMBNAIL_OUTLINE
     # Width in pixels of window preview thumbnails (height keeps the 4:3 ratio)
-    preview_thumbnail_width: int = DEFAULT_PREVIEW_THUMBNAIL_WIDTH
+    window_preview_thumbnail_width: int = DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH
     # Whether icon reordering, drag-in, and drag-off removal are locked
     lock_icons: bool = DEFAULT_LOCK_ICONS
     # Only show running apps from the active workspace
@@ -937,11 +937,11 @@ class Config:
             self.preview_thumbnail_outline,
             default=DEFAULT_PREVIEW_THUMBNAIL_OUTLINE,
         )
-        self.preview_thumbnail_width = _normalize_int(
-            self.preview_thumbnail_width,
-            default=DEFAULT_PREVIEW_THUMBNAIL_WIDTH,
-            minimum=MIN_PREVIEW_THUMBNAIL_WIDTH,
-            maximum=MAX_PREVIEW_THUMBNAIL_WIDTH,
+        self.window_preview_thumbnail_width = _normalize_int(
+            self.window_preview_thumbnail_width,
+            default=DEFAULT_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
+            minimum=MIN_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
+            maximum=MAX_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
         )
         self.lock_icons = _normalize_bool(
             self.lock_icons,

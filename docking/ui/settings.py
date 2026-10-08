@@ -62,16 +62,16 @@ from docking.core.config import (
     MAX_ADDITIONAL_DISTANCE_FROM_EDGE,
     MAX_ICON_SIZE,
     MAX_PRESSURE_THRESHOLD,
-    MAX_PREVIEW_THUMBNAIL_WIDTH,
     MAX_RECENT_APPS_RETENTION_DAYS,
     MAX_TRANSPARENCY,
+    MAX_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
     MAX_ZOOM_PERCENT,
     MIN_ADDITIONAL_DISTANCE_FROM_EDGE,
     MIN_ICON_SIZE,
     MIN_PRESSURE_THRESHOLD,
-    MIN_PREVIEW_THUMBNAIL_WIDTH,
     MIN_RECENT_APPS_RETENTION_DAYS,
     MIN_TRANSPARENCY,
+    MIN_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
     MIN_ZOOM_PERCENT,
     LeftClickAction,
     MiddleClickAction,
@@ -126,7 +126,7 @@ APPLET_GRID_ROW_SPACING_PX = 8
 APPLET_ROW_CONTENT_SPACING_PX = 6
 ZOOM_PERCENT_SCALE = 100
 ZOOM_PERCENT_STEP = 5
-PREVIEW_THUMBNAIL_WIDTH_STEP = 10
+WINDOW_PREVIEW_THUMBNAIL_WIDTH_STEP = 10
 TRANSPARENCY_PERCENT_SCALE = 100
 TRANSPARENCY_PERCENT_STEP = 5
 HIDE_DELAY_MAX_MS = 5000
@@ -269,7 +269,7 @@ class SettingsWindowController:
         self._launcher_progress_switch: Any = None
         self._previews_switch: Any = None
         self._preview_thumbnail_outline_switch: Any = None
-        self._preview_thumbnail_width_spin: Any = None
+        self._window_preview_thumbnail_width_spin: Any = None
         self._tooltips_switch: Any = None
         self._lock_icons_switch: Any = None
         self._workspace_only_switch: Any = None
@@ -433,10 +433,10 @@ class SettingsWindowController:
 
         self._previews_switch = self._new_switch()
         self._preview_thumbnail_outline_switch = self._new_switch()
-        self._preview_thumbnail_width_spin = self._new_numeric_spin_button(
-            minimum=MIN_PREVIEW_THUMBNAIL_WIDTH,
-            maximum=MAX_PREVIEW_THUMBNAIL_WIDTH,
-            step=PREVIEW_THUMBNAIL_WIDTH_STEP,
+        self._window_preview_thumbnail_width_spin = self._new_numeric_spin_button(
+            minimum=MIN_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
+            maximum=MAX_WINDOW_PREVIEW_THUMBNAIL_WIDTH,
+            step=WINDOW_PREVIEW_THUMBNAIL_WIDTH_STEP,
         )
         self._tooltips_switch = self._new_switch()
         self._window_count_numbers_switch = self._new_switch()
@@ -671,7 +671,7 @@ class SettingsWindowController:
                 ),
                 (
                     _("Thumbnail Width"),
-                    self._preview_thumbnail_width_spin,
+                    self._window_preview_thumbnail_width_spin,
                     _(
                         "Set the width in pixels of window thumbnails. "
                         "Wider thumbnails also show more of the window title."
@@ -1230,8 +1230,8 @@ class SettingsWindowController:
                 widget=self._previews_switch,
             ),
             self._register_int_binding(
-                config_attr="preview_thumbnail_width",
-                widget=self._preview_thumbnail_width_spin,
+                config_attr="window_preview_thumbnail_width",
+                widget=self._window_preview_thumbnail_width_spin,
             ),
             self._register_switch_binding(
                 config_attr="preview_thumbnail_outline",
@@ -1787,8 +1787,8 @@ class SettingsWindowController:
             self._preview_thumbnail_outline_switch.set_sensitive(
                 bool(self._config.previews_enabled)
             )
-        if self._preview_thumbnail_width_spin is not None:
-            self._preview_thumbnail_width_spin.set_sensitive(
+        if self._window_preview_thumbnail_width_spin is not None:
+            self._window_preview_thumbnail_width_spin.set_sensitive(
                 bool(self._config.previews_enabled)
             )
         if self._zoom_percent_spin is not None:

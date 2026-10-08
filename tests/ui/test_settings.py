@@ -738,7 +738,7 @@ def _config():
         hide_mode="autohide",
         previews_enabled=True,
         preview_thumbnail_outline=True,
-        preview_thumbnail_width=200,
+        window_preview_thumbnail_width=200,
         tooltips_enabled=True,
         left_click_action="toggle",
         middle_click_action="new-window",
@@ -1625,7 +1625,10 @@ class TestSettingsWindowController:
 
         switch = controller._preview_thumbnail_outline_switch
         assert switch.sensitive is expected_sensitive
-        assert controller._preview_thumbnail_width_spin.sensitive is expected_sensitive
+        assert (
+            controller._window_preview_thumbnail_width_spin.sensitive
+            is expected_sensitive
+        )
 
     def test_thumbnail_outline_switch_persists_to_config(self, monkeypatch):
         monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)
@@ -1662,13 +1665,13 @@ class TestSettingsWindowController:
         )
 
         controller.show()
-        spin = controller._preview_thumbnail_width_spin
+        spin = controller._window_preview_thumbnail_width_spin
         assert spin.range == (120, 400, 10)
         assert spin.get_value() == 200
         spin.set_value(320)
         spin.emit_value_changed()
 
-        assert config.preview_thumbnail_width == 320
+        assert config.window_preview_thumbnail_width == 320
 
     def test_binding_change_updates_config_once_and_runtime(self, monkeypatch):
         monkeypatch.setattr(settings_mod, "Gtk", FakeGtk)

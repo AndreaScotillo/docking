@@ -448,7 +448,7 @@ class DockWindow(Gtk.Window):
             lambda: self.config.preview_thumbnail_outline
         )
         self.preview.set_thumbnail_width_probe(
-            lambda: self.config.preview_thumbnail_width
+            lambda: self.config.window_preview_thumbnail_width
         )
         self.hover.set_preview(preview=self.preview)
 
