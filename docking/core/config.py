@@ -795,7 +795,7 @@ class Config:
     window_preview_highlight_thumbnails_on_hover: bool = (
         DEFAULT_WINDOW_PREVIEW_HIGHLIGHT_THUMBNAILS_ON_HOVER
     )
-    # Whether hovering a preview thumbnail outlines the real window (X11 only)
+    # Whether hovering a preview thumbnail outlines the real window (X11, Sway)
     window_preview_outline_window_on_hover: bool = (
         DEFAULT_WINDOW_PREVIEW_OUTLINE_WINDOW_ON_HOVER
     )
