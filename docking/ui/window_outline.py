@@ -64,7 +64,7 @@ class WindowOutline(Gtk.Window):
             surface.prepare_overlay_window(self)
 
     def show_around(self, rect: Rect) -> None:
-        """Outline ``rect`` (root coordinates); degenerate rects hide instead."""
+        """Outline ``rect`` (root coordinates in backend units); empty rects hide."""
         if rect.width <= 0 or rect.height <= 0:
             self.hide()
             return
@@ -74,11 +74,12 @@ class WindowOutline(Gtk.Window):
         if not (self._has_rgba_visual and self.get_screen().is_composited()):
             self.hide()
             return
-        self.resize(rect.width, rect.height)
         if self._surface is not None:
             self._surface.place_overlay(self, rect)
         else:
-            self.move(rect.x, rect.y)
+            logical = rect.device_to_logical(self.get_scale_factor())
+            self.move(logical.x, logical.y)
+            self.resize(logical.width, logical.height)
         self.show()
         self.queue_draw()
 

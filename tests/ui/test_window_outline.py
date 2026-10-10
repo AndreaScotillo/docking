@@ -71,6 +71,26 @@ class TestWindowOutlineWidget:
         finally:
             outline.destroy()
 
+    def test_show_around_converts_device_pixels_at_scale_two(self, monkeypatch):
+        monkeypatch.setattr(gtk_ui.WindowOutline, "get_scale_factor", lambda _self: 2)
+        outline = gtk_ui.WindowOutline()
+        try:
+            outline.show_around(Rect(60, 80, 600, 400))
+            assert outline.get_size() == (300, 200)
+            assert outline.get_position() == (30, 40)
+        finally:
+            outline.destroy()
+
+    def test_show_around_keeps_coordinates_at_scale_one(self, monkeypatch):
+        monkeypatch.setattr(gtk_ui.WindowOutline, "get_scale_factor", lambda _self: 1)
+        outline = gtk_ui.WindowOutline()
+        try:
+            outline.show_around(Rect(60, 80, 600, 400))
+            assert outline.get_size() == (600, 400)
+            assert outline.get_position() == (60, 80)
+        finally:
+            outline.destroy()
+
     def test_degenerate_rect_stays_hidden(self):
         outline = gtk_ui.WindowOutline()
         try:
@@ -156,6 +176,18 @@ class TestWindowOutlineSurfaceDelegation:
             )
             assert moves == []
             assert outline.get_visible()
+        finally:
+            outline.destroy()
+
+    def test_surface_receives_the_rect_untouched_at_scale_two(self, monkeypatch):
+        monkeypatch.setattr(gtk_ui.WindowOutline, "get_scale_factor", lambda _self: 2)
+        surface = self._surface(toplevel=True)
+        outline = gtk_ui.WindowOutline(surface)
+        try:
+            outline.show_around(Rect(60, 80, 600, 400))
+            surface.place_overlay.assert_called_once_with(
+                outline, Rect(60, 80, 600, 400)
+            )
         finally:
             outline.destroy()
 

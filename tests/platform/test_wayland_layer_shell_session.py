@@ -607,6 +607,21 @@ def test_layer_shell_place_overlay_uses_margins_relative_to_the_monitor():
     window.move.assert_not_called()
 
 
+def test_layer_shell_place_overlay_ignores_the_window_scale():
+    layer_shell = _layer_shell()
+    service = WaylandLayerShellSurfaceService(layer_shell=layer_shell)
+    window = _overlay_window(_gdk_monitor(1920, 100))
+    window.get_scale_factor.return_value = 2
+
+    service.place_overlay(window, Rect(2000, 300, 640, 480))
+
+    margins = {call.args[1]: call.args[2] for call in layer_shell.set_margin.mock_calls}
+    assert margins == {"left": 80, "top": 200}
+    window.set_size_request.assert_called_once_with(640, 480)
+    window.resize.assert_called_once_with(640, 480)
+    window.move.assert_not_called()
+
+
 def test_layer_shell_place_overlay_remaps_only_when_the_monitor_changes():
     layer_shell = _layer_shell()
     service = WaylandLayerShellSurfaceService(layer_shell=layer_shell)

@@ -77,6 +77,23 @@ class Rect:
             and self.bottom > other.y
         )
 
+    def device_to_logical(self, scale: int) -> Rect:
+        """Convert device pixels to logical units at an integer ``scale``.
+
+        The origin rounds down and the far edges round up, so the result always
+        covers the original rectangle (by under one logical pixel on odd values).
+        """
+        if scale <= 1:
+            return self
+        left = self.x // scale
+        top = self.y // scale
+        return Rect(
+            left,
+            top,
+            -(-self.right // scale) - left,
+            -(-self.bottom // scale) - top,
+        )
+
 
 @dataclass(frozen=True)
 class Size:
@@ -420,10 +437,14 @@ class SurfaceService(Service):
     def place_overlay(self, window: object, rect: Rect) -> None:
         """Place a prepared overlay window at ``rect`` in global coordinates.
 
-        The default suits backends where ``Gtk.Window.move()`` takes absolute
-        coordinates; compositor-positioned backends override it.
+        The default suits backends reporting device pixels and where
+        ``Gtk.Window.move()`` takes absolute coordinates, which GTK counts in
+        logical units; compositor-positioned backends override it and receive
+        logical coordinates already.
         """
-        window.move(rect.x, rect.y)
+        logical = rect.device_to_logical(window.get_scale_factor())
+        window.move(logical.x, logical.y)
+        window.resize(logical.width, logical.height)
 
     def external_workarea(self, monitor: MonitorSnapshot) -> Rect | None:
         """Return monitor space excluding other edge-reserving surfaces.
