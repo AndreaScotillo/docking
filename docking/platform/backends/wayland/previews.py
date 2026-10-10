@@ -764,16 +764,14 @@ def _pixbuf_from_request(
             for index in range(0, len(source), request.stride)
         ]
         source = b"".join(reversed(rows))
-    rgba = bytearray(len(source))
-    for index in range(0, len(source), 4):
-        b = source[index]
-        g = source[index + 1]
-        r = source[index + 2]
-        a = source[index + 3] if request.format == SHM_ARGB8888 else 255
-        rgba[index] = r
-        rgba[index + 1] = g
-        rgba[index + 2] = b
-        rgba[index + 3] = a
+    # Swap channels in bulk within each row so padding cannot shift channels.
+    rgba = bytearray(source)
+    for start in range(0, len(source), request.stride):
+        end = start + request.width * 4
+        rgba[start:end:4] = source[start + 2 : end : 4]
+        rgba[start + 2 : end : 4] = source[start:end:4]
+        if request.format != SHM_ARGB8888:
+            rgba[start + 3 : end : 4] = b"\xff" * request.width
     data = GLib.Bytes.new(bytes(rgba))
     pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
         data,
